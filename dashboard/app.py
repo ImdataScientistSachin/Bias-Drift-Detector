@@ -19,6 +19,10 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
+from scipy.stats import ks_2samp
+from sklearn.metrics import confusion_matrix, precision_score, recall_score, f1_score, accuracy_score
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 # ============================================================================
 # DEMO DATA (Pre-calculated from German Credit Dataset)
@@ -168,6 +172,25 @@ INTERSECTIONAL_DATA = {
     ],
     "intersectional_fairness_score": 40
 }
+
+# Sample DataFrame for drift simulation and confusion matrix
+# This simulates the German Credit dataset structure
+np.random.seed(42)
+n_samples = 150
+
+DEMO_DF = pd.DataFrame({
+    'age': np.random.randint(20, 70, n_samples),
+    'credit_amount': np.random.randint(500, 15000, n_samples),
+    'duration': np.random.randint(6, 48, n_samples),
+    'installment_rate': np.random.randint(1, 5, n_samples),
+    'Risk': np.random.choice(['good', 'bad'], n_samples, p=[0.7, 0.3])
+})
+
+# Simulated model predictions (for confusion matrix)
+# In reality, these would come from your actual model
+DEMO_DF['y_true'] = (DEMO_DF['Risk'] == 'bad').astype(int)
+# Simple rule-based prediction for demo (replace with actual model)
+DEMO_DF['y_pred'] = ((DEMO_DF['credit_amount'] > 7500) | (DEMO_DF['duration'] > 30)).astype(int)
 
 # ============================================================================
 # PAGE CONFIGURATION
@@ -406,6 +429,70 @@ else:
     st.info("ℹ️ No drift analysis data available yet.")
 
 # ============================================================================
+# DRIFT SIMULATION (NEW!)
+# ============================================================================
+
+st.markdown("---")
+st.markdown("## 🌊 Interactive Drift Simulation")
+st.markdown("**What If Production Data Shifts?** See how distribution changes affect your model.")
+
+drift_intensity = st.slider(
+    "Simulate drift by shifting numerical features ± X%",
+    min_value=0, max_value=100, value=20, step=10,
+    help="Simulates concept drift by adding noise to numerical features"
+)
+
+if drift_intensity > 0:
+    # Create drifted version of data
+    df_drift = DEMO_DF.copy()
+    numeric_cols = ['age', 'credit_amount', 'duration', 'installment_rate']
+    
+    for col in numeric_cols:
+        shift = np.random.normal(0, drift_intensity/100, len(df_drift)) * DEMO_DF[col].std()
+        df_drift[col] = DEMO_DF[col] + shift
+    
+    # Visualize drift
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Original Distribution")
+        fig_orig = px.histogram(
+            DEMO_DF, 
+            x="credit_amount", 
+            color="Risk",
+            title="Credit Amount (Original Data)",
+            nbins=30,
+            color_discrete_map={'good': '#28a745', 'bad': '#dc3545'}
+        )
+        fig_orig.update_layout(height=350)
+        st.plotly_chart(fig_orig, use_container_width=True)
+    
+    with col2:
+        st.subheader(f"Drifted Distribution (+{drift_intensity}%)")
+        fig_drift_sim = px.histogram(
+            df_drift, 
+            x="credit_amount", 
+            color="Risk",
+            title=f"Credit Amount (Drifted +{drift_intensity}%)",
+            nbins=30,
+            color_discrete_map={'good': '#28a745', 'bad': '#dc3545'}
+        )
+        fig_drift_sim.update_layout(height=350)
+        st.plotly_chart(fig_drift_sim, use_container_width=True)
+    
+    # KS-test for drift detection
+    ks_stat, p_value = ks_2samp(DEMO_DF["credit_amount"], df_drift["credit_amount"])
+    
+    if p_value < 0.05:
+        st.error(f"🚨 **Drift Detected!** KS Test p-value: {p_value:.4f} (< 0.05) → Significant distribution shift detected")
+    else:
+        st.success(f"✅ **No Significant Drift** KS Test p-value: {p_value:.4f} (>= 0.05) → Distribution remains stable")
+    
+    st.info(f"📊 **KS Statistic**: {ks_stat:.4f} | **Interpretation**: Higher values indicate greater distribution differences")
+else:
+    st.info("👆 Move the slider above to simulate drift and see its impact on data distribution")
+
+# ============================================================================
 # BIAS ANALYSIS
 # ============================================================================
 
@@ -599,6 +686,112 @@ if report:
     st.markdown(report)
 else:
     st.info("ℹ️ No root cause report available.")
+
+# ============================================================================
+# MODEL PERFORMANCE & CONFUSION MATRIX (NEW!)
+# ============================================================================
+
+st.markdown("---")
+st.markdown("## 📊 Model Performance Summary")
+st.markdown("**Evaluate model accuracy and error patterns**")
+
+# Calculate metrics from demo data
+y_true = DEMO_DF['y_true'].values
+y_pred = DEMO_DF['y_pred'].values
+
+# Calculate performance metrics
+accuracy = accuracy_score(y_true, y_pred)
+precision = precision_score(y_true, y_pred, zero_division=0)
+recall = recall_score(y_true, y_pred, zero_division=0)
+f1 = f1_score(y_true, y_pred, zero_division=0)
+
+# Display metrics in cards
+col1, col2, col3, col4 = st.columns(4)
+
+with col1:
+    delta_color = "normal" if accuracy >= 0.7 else "inverse"
+    st.metric(
+        "Accuracy", 
+        f"{accuracy:.1%}",
+        delta=f"{(accuracy - 0.7):.1%}" if accuracy >= 0.7 else f"{(accuracy - 0.7):.1%}",
+        delta_color=delta_color,
+        help="Overall correctness of predictions"
+    )
+
+with col2:
+    st.metric(
+        "Precision", 
+        f"{precision:.1%}",
+        help="Of predicted positives, how many are actually positive?"
+    )
+
+with col3:
+    st.metric(
+        "Recall", 
+        f"{recall:.1%}",
+        help="Of actual positives, how many did we catch?"
+    )
+
+with col4:
+    st.metric(
+        "F1-Score", 
+        f"{f1:.1%}",
+        delta="Key Metric",
+        help="Harmonic mean of precision and recall"
+    )
+
+# Confusion Matrix Visualization
+st.subheader("Confusion Matrix")
+
+col1, col2 = st.columns([2, 1])
+
+with col1:
+    # Calculate confusion matrix
+    cm = confusion_matrix(y_true, y_pred)
+    
+    # Create heatmap
+    fig_cm, ax = plt.subplots(figsize=(8, 6))
+    sns.heatmap(
+        cm, 
+        annot=True, 
+        fmt='d', 
+        cmap='Blues', 
+        ax=ax,
+        xticklabels=['Predicted Good (0)', 'Predicted Bad (1)'],
+        yticklabels=['Actual Good (0)', 'Actual Bad (1)'],
+        cbar_kws={'label': 'Count'}
+    )
+    ax.set_title("Confusion Matrix - Credit Risk Predictions", fontsize=14, fontweight='bold')
+    ax.set_xlabel("Predicted Label", fontsize=12)
+    ax.set_ylabel("True Label", fontsize=12)
+    
+    st.pyplot(fig_cm)
+    plt.close()
+
+with col2:
+    st.markdown("### Interpretation")
+    
+    tn, fp, fn, tp = cm.ravel()
+    
+    st.markdown(f"""
+    **Matrix Breakdown**:
+    - ✅ **True Negatives**: {tn} (Correctly predicted good)
+    - ❌ **False Positives**: {fp} (Predicted bad, actually good)
+    - ❌ **False Negatives**: {fn} (Predicted good, actually bad)
+    - ✅ **True Positives**: {tp} (Correctly predicted bad)
+    
+    **Key Insights**:
+    - Total predictions: {len(y_true)}
+    - Correct predictions: {tn + tp}
+    - Errors: {fp + fn}
+    """)
+    
+    if fp > fn:
+        st.warning("⚠️ More **false positives** - Model is conservative (rejects good applicants)")
+    elif fn > fp:
+        st.warning("⚠️ More **false negatives** - Model is risky (approves bad applicants)")
+    else:
+        st.success("✅ Balanced error distribution")
 
 # ============================================================================
 # FOOTER
