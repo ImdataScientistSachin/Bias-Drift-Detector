@@ -1,0 +1,17 @@
+fastapi
+uvicorn
+pandas
+numpy<2
+scipy
+scikit-learn
+fairlearn
+alibi-detect
+shap
+dice-ml
+sqlalchemy
+psycopg2-binary
+redis
+streamlit
+requests
+httpx
+plotly
