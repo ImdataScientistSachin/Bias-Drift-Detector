@@ -1,17 +1,35 @@
+# Requirements for Streamlit Cloud deployment (app.py)
+# Optimized to avoid build errors while keeping core functionality
+
+# API Framework (for local development)
 fastapi
 uvicorn
+
+# Core data processing
 pandas
 numpy<2
 scipy
 scikit-learn
+
+# Fairness analysis
 fairlearn
-alibi-detect
+
+# Explainability (SHAP works, alibi-detect causes errors)
 shap
-dice-ml
-sqlalchemy
-psycopg2-binary
-redis
+
+# Future features (commented out for now)
+# dice-ml  # Uncomment when implementing counterfactuals
+
+# Database (optional, for future use)
+# sqlalchemy
+# psycopg2-binary
+# redis
+
+# Dashboard
 streamlit
 requests
 httpx
 plotly
+
+# Note: alibi-detect removed - causes llvmlite build errors on Streamlit Cloud
+# The app will work without it for the current feature set
