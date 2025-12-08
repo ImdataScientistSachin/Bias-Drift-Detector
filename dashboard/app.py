@@ -381,7 +381,7 @@ if drift_data:
         
         st.dataframe(
             df_drift.style.apply(highlight_alerts, axis=1),
-            use_container_width=True,
+            width='stretch',
             height=300
         )
         
@@ -407,7 +407,7 @@ if drift_data:
             height=350
         )
         
-        st.plotly_chart(fig_drift, use_container_width=True)
+        st.plotly_chart(fig_drift, width='stretch')
     
     with st.expander("📖 How to Interpret Drift Scores"):
         st.markdown("""
@@ -465,7 +465,7 @@ if drift_intensity > 0:
             color_discrete_map={'good': '#28a745', 'bad': '#dc3545'}
         )
         fig_orig.update_layout(height=350)
-        st.plotly_chart(fig_orig, use_container_width=True)
+        st.plotly_chart(fig_orig, width='stretch')
     
     with col2:
         st.subheader(f"Drifted Distribution (+{drift_intensity}%)")
@@ -478,7 +478,7 @@ if drift_intensity > 0:
             color_discrete_map={'good': '#28a745', 'bad': '#dc3545'}
         )
         fig_drift_sim.update_layout(height=350)
-        st.plotly_chart(fig_drift_sim, use_container_width=True)
+        st.plotly_chart(fig_drift_sim, width='stretch')
     
     # KS-test for drift detection
     ks_stat, p_value = ks_2samp(DEMO_DF["credit_amount"], df_drift["credit_amount"])
@@ -579,7 +579,7 @@ if bias_data and len(bias_data) > 1:
                 )
             
             fig_sel.update_layout(height=400)
-            st.plotly_chart(fig_sel, use_container_width=True)
+            st.plotly_chart(fig_sel, width='stretch')
             
             if 'accuracy' in metrics['by_group']:
                 st.subheader(f"Model Accuracy by {attr}")
@@ -597,7 +597,7 @@ if bias_data and len(bias_data) > 1:
                 )
                 
                 fig_acc.update_layout(height=350)
-                st.plotly_chart(fig_acc, use_container_width=True)
+                st.plotly_chart(fig_acc, width='stretch')
 
 # ============================================================================
 # INTERSECTIONAL ANALYSIS (NEW!)
@@ -630,7 +630,7 @@ with col1:
     
     st.dataframe(
         df_intersectional[['group', 'selection_rate_pct', 'count', 'disparity_ratio', 'status']],
-        use_container_width=True,
+        width='stretch',
         height=250
     )
 
@@ -672,7 +672,7 @@ fig_intersectional.add_hline(
     annotation_position="right"
 )
 
-st.plotly_chart(fig_intersectional, use_container_width=True)
+st.plotly_chart(fig_intersectional, width='stretch')
 
 # ============================================================================
 # ROOT CAUSE ANALYSIS

@@ -1,0 +1,53 @@
+# ================================================================================
+# BIAS DRIFT GUARDIAN - COMPLETE DEPENDENCIES
+# ================================================================================
+# This file includes ALL dependencies for the full stack (API + Dashboard)
+# For Streamlit Cloud deployment, use requirements-dashboard.txt instead
+# ================================================================================
+
+# Core Data Processing
+pandas>=1.5.0
+numpy<2  # Pinned to v1.x for compatibility
+
+# Scientific Computing & Statistics
+scipy>=1.9.0
+scikit-learn>=1.2.0
+
+# Fairness & Explainability
+fairlearn>=0.8.0  # Microsoft's fairness toolkit
+shap>=0.42.0      # SHAP values for root cause analysis
+
+# API Framework (Backend)
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0  # ASGI server with websockets
+pydantic>=2.0.0   # Data validation
+
+# Dashboard Framework (Frontend)
+streamlit>=1.28.0
+
+# Visualization
+plotly>=5.14.0
+seaborn>=0.12.0
+matplotlib>=3.7.0
+
+# Testing (Optional - for development)
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+httpx>=0.24.0  # For testing FastAPI
+
+# ================================================================================
+# DEPLOYMENT NOTES
+# ================================================================================
+# Total size: ~150MB (includes all dependencies)
+# 
+# For Streamlit Cloud (dashboard only):
+#   - Use requirements-dashboard.txt (lighter, ~30MB)
+#   - Excludes: fastapi, uvicorn, shap
+#
+# For Docker deployment:
+#   - Use this file
+#   - Python 3.9+ recommended
+#
+# For local development:
+#   pip install -r requirements-full.txt
+# ================================================================================
