@@ -151,7 +151,7 @@ docker-compose up -d
 ## 📊 Demo & Screenshots
 
 ### 🎬 Live Demo
-**Try it now:** [https://bias-drift-detector.streamlit.app](https://bias-drift-detector.streamlit.app)
+**Try it now:** https://bias-drift-guardian.streamlit.app/
 
 ### 📸 Screenshots
 
