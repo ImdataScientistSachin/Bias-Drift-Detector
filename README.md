@@ -9,15 +9,47 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688.svg)](https://fastapi.tiangolo.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Last Commit](https://img.shields.io/github/last-commit/ImdataScientistSachin/Bias-Drift-Detector)](https://github.com/ImdataScientistSachin/Bias-Drift-Detector/commits/main)
+[![Maintained](https://img.shields.io/badge/Maintained-Actively-brightgreen)](https://github.com/ImdataScientistSachin/Bias-Drift-Detector/graphs/commit-activity)
+[![GitHub stars](https://img.shields.io/github/stars/ImdataScientistSachin/Bias-Drift-Detector?style=social)](https://github.com/ImdataScientistSachin/Bias-Drift-Detector/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/ImdataScientistSachin/Bias-Drift-Detector?style=social)](https://github.com/ImdataScientistSachin/Bias-Drift-Detector/network/members)
 
-**[Live Demo](https://bias-drift-detector.streamlit.app)** • **[Documentation](docs/INDEX.md)** • **[API Docs](http://localhost:8000/docs)** • **[Report Bug](https://github.com/ImdataScientistSachin/Bias-Drift-Detector/issues)**
+**[🚀 Live Demo](https://bias-drift-guardian.streamlit.app)** • **[📚 Documentation](docs/INDEX.md)** • **[🌐 API Docs](http://localhost:8000/docs)** • **[💼 LinkedIn](https://www.linkedin.com/in/sachin-paunikar-datascientists)** • **[🐛 Report Bug](https://github.com/ImdataScientistSachin/Bias-Drift-Detector/issues)**
 
 <img src="https://img.shields.io/badge/Status-Production%20Ready-success" alt="Status">
-<img src="https://img.shields.io/badge/Maintained-Yes-green" alt="Maintained">
+<img src="https://img.shields.io/badge/Updated-December%202025-blue" alt="Updated">
 
 ---
 
 ### 🎯 **Detect bias before it becomes a lawsuit. Monitor drift before it breaks your model.**
+
+</div>
+
+---
+
+## 📋 Executive Summary
+
+**Bias Drift Guardian** is a **production-ready dashboard and API** for real-time bias and drift detection in machine learning models. Built with **Streamlit + FastAPI**, it ensures compliance with **EEOC/EU AI Act** regulations and explains root causes with **SHAP**. 
+
+**Key Highlights:**
+- ⚡ **Deploy in 30 seconds** - Standalone Streamlit dashboard with pre-loaded demo
+- 🎯 **Unique Feature** - Intersectional bias detection (not available in standard tools)
+- 📊 **Comprehensive Monitoring** - Drift detection (PSI, KS, Chi-square) + Fairness metrics
+- 🔍 **Root Cause Analysis** - SHAP-based explanations for model behavior changes
+- 🚀 **Production-Ready** - FastAPI backend with persistence, Docker support, live deployment
+- 📚 **Actively Maintained** - 2,800+ lines of documentation, open-source (MIT), updated December 2025
+
+**🎯 Perfect for:** **ML Engineers • Data Scientists • Compliance Teams • AI Ethics Researchers**
+
+---
+
+## 📸 Dashboard Preview
+
+<div align="center">
+
+![Bias Drift Guardian Dashboard](assets/dashboard-screenshot.png)
+
+*Interactive dashboard showing drift alerts, fairness metrics, and intersectional bias analysis*
 
 </div>
 
@@ -404,12 +436,70 @@ print(f"Drift Alerts: {len([d for d in metrics['drift_analysis'] if d['alert']])
 print(f"Fairness Score: {metrics['bias_analysis']['fairness_score']}")
 ```
 
-### Example 5: Complete Demo
+### Example 5: Run Complete Demos
 
-See working examples:
-- **[German Credit Demo](examples/german_credit_demo.py)** - Credit risk analysis
-- **[Adult Census Demo](examples/adult_demo.py)** - Income prediction
-- **[Live API Client](examples/live_demo_client.py)** - API integration
+We provide **3 ready-to-run examples** demonstrating real-world use cases:
+
+#### 📊 German Credit Demo
+**Use Case:** Credit risk analysis with fairness monitoring
+
+```bash
+python examples/german_credit_demo.py
+```
+
+**What it does:**
+- Loads German Credit dataset (1,000 samples)
+- Trains RandomForest classifier
+- Registers model with API
+- Simulates drift by shifting age distribution
+- Logs 150 predictions
+- Analyzes drift and bias
+
+**Expected Output:**
+```
+Drift Alerts: 2 (age, savings_status)
+Fairness Score: 60/100
+Sex Disparate Impact: 0.75 ❌ FAIL
+```
+
+**File:** [`examples/german_credit_demo.py`](examples/german_credit_demo.py)
+
+---
+
+#### 👥 Adult Census Demo
+**Use Case:** Income prediction fairness analysis
+
+```bash
+python examples/adult_demo.py
+```
+
+**What it does:**
+- Analyzes Adult Census dataset
+- Detects intersectional bias (race × gender × age)
+- Monitors for demographic drift
+
+**File:** [`examples/adult_demo.py`](examples/adult_demo.py)
+
+---
+
+#### 🌐 Live API Client
+**Use Case:** API integration example
+
+```bash
+python examples/live_demo_client.py
+```
+
+**What it does:**
+- Demonstrates API endpoints
+- Shows model registration
+- Logs predictions
+- Retrieves metrics
+
+**File:** [`examples/live_demo_client.py`](examples/live_demo_client.py)
+
+---
+
+**💡 Tip:** Start with `german_credit_demo.py` for a complete end-to-end example!
 
 ---
 
@@ -529,70 +619,90 @@ flake8 .
 
 ## 🗺️ Roadmap
 
-### ✅ Completed
-- [x] Core drift detection (PSI, KS, Chi-square)
-- [x] Fairness analysis (Disparate Impact, Demographic Parity, Equalized Odds)
-- [x] Intersectional bias detection
-- [x] Root cause analysis (SHAP)
-- [x] Standalone Streamlit demo
-- [x] FastAPI backend with persistence
-- [x] Comprehensive documentation (2,800+ lines)
-- [x] Docker support
-- [x] Streamlit Cloud deployment
+### ✅ Completed Features
+
+<details open>
+<summary><b>Click to see all 9 completed features</b></summary>
+
+- ✅ **Core drift detection** (PSI, KS, Chi-square)
+- ✅ **Fairness analysis** (Disparate Impact, Demographic Parity, Equalized Odds)
+- ✅ **Intersectional bias detection** ⭐ Unique feature
+- ✅ **Root cause analysis** (SHAP-based explanations)
+- ✅ **Standalone Streamlit demo** (works without backend)
+- ✅ **FastAPI backend** with persistence layer
+- ✅ **Comprehensive documentation** (2,800+ lines)
+- ✅ **Docker support** (docker-compose ready)
+- ✅ **Streamlit Cloud deployment** (live demo available)
+
+</details>
 
 ### 🚧 In Progress
-- [ ] Unit tests (target: 80% coverage)
-- [ ] CI/CD pipeline (GitHub Actions)
-- [ ] Performance optimizations
+- ⏳ Unit tests (target: 80% coverage)
+- ⏳ CI/CD pipeline (GitHub Actions)
+- ⏳ Performance optimizations
 
-### 📋 Planned
-- [ ] Time-series drift tracking
-- [ ] Automated alerting (email/Slack)
-- [ ] Model comparison features
-- [ ] PostgreSQL integration
-- [ ] Redis caching
-- [ ] Kubernetes deployment guide
-- [ ] Multi-language support
-- [ ] Custom metric plugins
+### 📋 Planned Features
+- 📅 Time-series drift tracking
+- 📧 Automated alerting (email/Slack)
+- 📊 Model comparison features
+- 🗄️ PostgreSQL integration
+- ⚡ Redis caching
+- ☸️ Kubernetes deployment guide
+- 🌍 Multi-language support
+- 🔌 Custom metric plugins
 
 ---
 
 ## ❓ FAQ
 
 <details>
+<summary><b>Can I deploy this commercially?</b></summary>
+
+**Yes!** This project is MIT licensed. You can use it commercially with attribution. Perfect for:
+- Enterprise ML monitoring
+- SaaS products
+- Consulting projects
+- Internal tools
+
+</details>
+
+<details>
+<summary><b>Is this GDPR compliant?</b></summary>
+
+The system doesn't store sensitive data by default. For GDPR compliance:
+- ✅ Data is processed in-memory
+- ✅ No PII stored without configuration
+- ⚠️ Implement data anonymization for production
+- ⚠️ Configure retention policies as needed
+
+</details>
+
+<details>
 <summary><b>Can I use this with my own dataset?</b></summary>
 
 Yes! The system is model-agnostic. Just register your model with baseline data and start logging predictions.
+
 </details>
 
 <details>
 <summary><b>What models are supported?</b></summary>
 
 Any scikit-learn compatible model. For SHAP analysis: RandomForest, XGBoost, LightGBM, and Linear models work best.
+
 </details>
 
 <details>
 <summary><b>How much data do I need?</b></summary>
 
 Minimum 500 samples for baseline. For production monitoring, analyze every 100-1000 predictions depending on risk level.
-</details>
 
-<details>
-<summary><b>Is this GDPR compliant?</b></summary>
-
-The system doesn't store sensitive data by default. For GDPR compliance, implement data anonymization and retention policies in your deployment.
 </details>
 
 <details>
 <summary><b>How does intersectional analysis differ from standard bias analysis?</b></summary>
 
 Standard analysis checks one attribute at a time (e.g., gender OR age). Intersectional analysis checks combinations (e.g., "Female employees aged 50+"), catching compound discrimination that single-attribute analysis misses.
-</details>
 
-<details>
-<summary><b>Can I deploy this commercially?</b></summary>
-
-Yes! This project is MIT licensed. You can use it commercially with attribution.
 </details>
 
 ---
@@ -634,7 +744,7 @@ This project was inspired by the need for accessible, production-ready fairness 
 **Sachin Paunikar**
 
 - 📧 Email: [ImdataScientistSachin@gmail.com](mailto:ImdataScientistSachin@gmail.com)
-- 💼 LinkedIn: [linkedin.com/in/sachin-paunikar-datascientists](https://www.linkedin.com/in/sachin-paunikar-datascientists)
+- 💼 LinkedIn: [linkedin.com/in/sachin-paunikar-datascientists](https://www.linkedin.com/in/sachin-paunikar-datascientists) [![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue?style=flat&logo=linkedin)](https://www.linkedin.com/in/sachin-paunikar-datascientists)
 - 🐙 GitHub: [@ImdataScientistSachin](https://github.com/ImdataScientistSachin)
 
 ---
