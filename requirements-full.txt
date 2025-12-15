@@ -16,6 +16,8 @@ scikit-learn>=1.2.0
 # Fairness & Explainability
 fairlearn>=0.8.0  # Microsoft's fairness toolkit
 shap>=0.42.0      # SHAP values for root cause analysis
+dice-ml>=0.11
+numexpr     # DiCE for counterfactual explanations
 
 # API Framework (Backend)
 fastapi>=0.100.0

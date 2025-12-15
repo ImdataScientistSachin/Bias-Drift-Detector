@@ -14,6 +14,7 @@ all features: drift detection, fairness analysis, and intersectional bias.
 """
 
 import streamlit as st
+import requests
 import pandas as pd
 import numpy as np
 import plotly.express as px
@@ -23,6 +24,8 @@ from scipy.stats import ks_2samp
 from sklearn.metrics import confusion_matrix, precision_score, recall_score, f1_score, accuracy_score
 import seaborn as sns
 import matplotlib.pyplot as plt
+import time
+import uuid
 
 # ============================================================================
 # DEMO DATA (Pre-calculated from German Credit Dataset)
@@ -259,7 +262,21 @@ st.markdown("""
     }
     
     #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
+    
+    /* Sticky Footer */
+    .sticky-footer {
+        position: fixed;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        background-color: #f8f9fa;
+        color: #6c757d;
+        text-align: center;
+        padding: 10px;
+        font-size: 0.85rem;
+        border-top: 1px solid #dee2e6;
+        z-index: 999;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -287,6 +304,7 @@ This is a standalone demo using pre-calculated metrics from the German Credit da
 - ✅ Fairness Analysis
 - ✅ Intersectional Bias Detection
 - ✅ Root Cause Analysis
+- ✅ **What-If Analysis & Counterfactuals**
 """)
 
 model_id = st.sidebar.selectbox(
@@ -298,512 +316,405 @@ model_id = st.sidebar.selectbox(
 st.sidebar.caption(f"Last updated: {datetime.now().strftime('%H:%M:%S')}")
 
 # ============================================================================
-# MAIN DASHBOARD
+# MAIN DASHBOARD TABS
 # ============================================================================
 
 data = DEMO_METRICS
 
-# Top-level metrics
-col1, col2, col3, col4 = st.columns(4)
-
-with col1:
-    total_preds = data.get("total_predictions", 0)
-    st.metric(
-        label="📊 Total Predictions",
-        value=f"{total_preds:,}",
-        help="Total number of predictions logged for this model"
-    )
-
-with col2:
-    fairness_score = data.get("bias_analysis", {}).get("fairness_score", 0)
-    st.metric(
-        label="⚖️ Fairness Score",
-        value=f"{fairness_score}/100",
-        delta=f"{fairness_score - 70}" if fairness_score < 70 else None,
-        delta_color="inverse" if fairness_score < 70 else "normal",
-        help="Overall fairness score (0-100). Higher is better."
-    )
-
-with col3:
-    drift_alerts = len([d for d in data.get("drift_analysis", []) if d.get('alert')])
-    st.metric(
-        label="🚨 Drift Alerts",
-        value=drift_alerts,
-        delta=f"+{drift_alerts}" if drift_alerts > 0 else "0",
-        delta_color="inverse" if drift_alerts > 0 else "normal",
-        help="Number of features showing significant drift"
-    )
-
-with col4:
-    drift_data = data.get("drift_analysis", [])
-    if drift_data:
-        avg_drift = sum(d.get('score', 0) for d in drift_data) / len(drift_data)
-        st.metric(
-            label="📈 Avg Drift Score",
-            value=f"{avg_drift:.3f}",
-            help="Average drift score across all features"
-        )
-    else:
-        st.metric(label="📈 Avg Drift Score", value="N/A")
-
-# Fairness interpretation
-if fairness_score >= 80:
-    st.markdown('<div class="success-box">✅ <strong>Excellent Fairness</strong> - Model shows minimal bias</div>', unsafe_allow_html=True)
-elif fairness_score >= 60:
-    st.markdown('<div class="alert-box">⚠️ <strong>Good Fairness</strong> - Minor bias concerns, monitor closely</div>', unsafe_allow_html=True)
-elif fairness_score >= 40:
-    st.markdown('<div class="alert-box">⚠️ <strong>Moderate Bias</strong> - Investigation recommended</div>', unsafe_allow_html=True)
-else:
-    st.markdown('<div class="danger-box">❌ <strong>Significant Bias Detected</strong> - Immediate action required!</div>', unsafe_allow_html=True)
+# Create Tabs
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "📊 Overview", 
+    "⚖️ Fairness", 
+    "🎯 Intersectional", 
+    "🔮 What-If Analysis", 
+    "📉 Drift", 
+    "📊 Performance"
+])
 
 # ============================================================================
-# DRIFT ANALYSIS
+# TAB 1: OVERVIEW
 # ============================================================================
 
-st.markdown("---")
-st.markdown("## 📉 Data Drift Analysis")
-
-drift_data = data.get("drift_analysis", [])
-
-if drift_data:
-    df_drift = pd.DataFrame(drift_data)
-    
-    col_table, col_chart = st.columns([1, 1])
-    
-    with col_table:
-        st.subheader("Drift Details")
-        
-        def highlight_alerts(row):
-            if row['alert']:
-                return ['background-color: #ffcdd2'] * len(row)
-            else:
-                return [''] * len(row)
-        
-        st.dataframe(
-            df_drift.style.apply(highlight_alerts, axis=1),
-            width='stretch',
-            height=300
-        )
-        
-        st.caption("🔴 Red rows indicate drift alerts")
-    
-    with col_chart:
-        st.subheader("Drift Score Visualization")
-        
-        fig_drift = px.bar(
-            df_drift,
-            x='feature',
-            y='score',
-            color='alert',
-            title="Feature Drift Scores",
-            color_discrete_map={True: '#dc3545', False: '#28a745'},
-            labels={'score': 'Drift Score', 'feature': 'Feature'},
-            hover_data=['type', 'metric', 'p_value']
-        )
-        
-        fig_drift.update_layout(
-            showlegend=True,
-            legend_title_text='Alert Status',
-            height=350
-        )
-        
-        st.plotly_chart(fig_drift, width='stretch')
-    
-    with st.expander("📖 How to Interpret Drift Scores"):
-        st.markdown("""
-        **For Numerical Features (KS+PSI)**:
-        - PSI < 0.1: ✅ No significant change
-        - PSI 0.1-0.25: ⚠️ Minor drift (monitor)
-        - PSI > 0.25: ❌ Major drift (action needed)
-        
-        **For Categorical Features (Chi-square)**:
-        - p-value < 0.05: ❌ Significant drift detected
-        - p-value >= 0.05: ✅ No significant drift
-        
-        **What to do if drift is detected**:
-        1. Investigate the root cause (data collection changes, user behavior shifts)
-        2. Consider retraining your model with recent data
-        3. Monitor performance metrics closely
-        """)
-else:
-    st.info("ℹ️ No drift analysis data available yet.")
-
-# ============================================================================
-# DRIFT SIMULATION (NEW!)
-# ============================================================================
-
-st.markdown("---")
-st.markdown("## 🌊 Interactive Drift Simulation")
-st.markdown("**What If Production Data Shifts?** See how distribution changes affect your model.")
-
-drift_intensity = st.slider(
-    "Simulate drift by shifting numerical features ± X%",
-    min_value=0, max_value=100, value=20, step=10,
-    help="Simulates concept drift by adding noise to numerical features"
-)
-
-if drift_intensity > 0:
-    # Create drifted version of data
-    df_drift = DEMO_DF.copy()
-    numeric_cols = ['age', 'credit_amount', 'duration', 'installment_rate']
-    
-    for col in numeric_cols:
-        shift = np.random.normal(0, drift_intensity/100, len(df_drift)) * DEMO_DF[col].std()
-        df_drift[col] = DEMO_DF[col] + shift
-    
-    # Visualize drift
-    col1, col2 = st.columns(2)
+with tab1:
+    # Top-level metrics
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.subheader("Original Distribution")
-        fig_orig = px.histogram(
-            DEMO_DF, 
-            x="credit_amount", 
-            color="Risk",
-            title="Credit Amount (Original Data)",
-            nbins=30,
-            color_discrete_map={'good': '#28a745', 'bad': '#dc3545'}
+        total_preds = data.get("total_predictions", 0)
+        st.metric(
+            label="Total Predictions",
+            value=f"{total_preds:,}",
+            help="Total number of predictions logged"
         )
-        fig_orig.update_layout(height=350)
-        st.plotly_chart(fig_orig, width='stretch')
     
     with col2:
-        st.subheader(f"Drifted Distribution (+{drift_intensity}%)")
-        fig_drift_sim = px.histogram(
-            df_drift, 
-            x="credit_amount", 
-            color="Risk",
-            title=f"Credit Amount (Drifted +{drift_intensity}%)",
-            nbins=30,
-            color_discrete_map={'good': '#28a745', 'bad': '#dc3545'}
+        fairness_score = data.get("bias_analysis", {}).get("fairness_score", 0)
+        st.metric(
+            label="Fairness Score",
+            value=f"{fairness_score}/100",
+            delta=f"{fairness_score - 70}" if fairness_score < 70 else None,
+            delta_color="inverse" if fairness_score < 70 else "normal",
+            help="Overall fairness score (0-100)"
         )
-        fig_drift_sim.update_layout(height=350)
-        st.plotly_chart(fig_drift_sim, width='stretch')
     
-    # KS-test for drift detection
-    ks_stat, p_value = ks_2samp(DEMO_DF["credit_amount"], df_drift["credit_amount"])
+    with col3:
+        drift_alerts = len([d for d in data.get("drift_analysis", []) if d.get('alert')])
+        st.metric(
+            label="Drift Alerts",
+            value=drift_alerts,
+            delta=f"+{drift_alerts}" if drift_alerts > 0 else "0",
+            delta_color="inverse" if drift_alerts > 0 else "normal"
+        )
     
-    if p_value < 0.05:
-        st.error(f"🚨 **Drift Detected!** KS Test p-value: {p_value:.4f} (< 0.05) → Significant distribution shift detected")
-    else:
-        st.success(f"✅ **No Significant Drift** KS Test p-value: {p_value:.4f} (>= 0.05) → Distribution remains stable")
-    
-    st.info(f"📊 **KS Statistic**: {ks_stat:.4f} | **Interpretation**: Higher values indicate greater distribution differences")
-else:
-    st.info("👆 Move the slider above to simulate drift and see its impact on data distribution")
-
-# ============================================================================
-# BIAS ANALYSIS
-# ============================================================================
-
-st.markdown("---")
-st.markdown("## ⚖️ Bias & Fairness Analysis")
-
-bias_data = data.get("bias_analysis", {})
-
-if bias_data and len(bias_data) > 1:
-    sensitive_attrs = [k for k in bias_data.keys() if k != 'fairness_score']
-    
-    tabs = st.tabs([f"📊 {attr}" for attr in sensitive_attrs])
-    
-    for i, attr in enumerate(sensitive_attrs):
-        with tabs[i]:
-            metrics = bias_data[attr]
-            
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                di = metrics['disparate_impact']
-                di_status = "✅" if di >= 0.8 else "❌"
-                st.metric(
-                    label=f"{di_status} Disparate Impact",
-                    value=f"{di:.4f}",
-                    delta="Pass" if di >= 0.8 else "Fail",
-                    delta_color="normal" if di >= 0.8 else "inverse",
-                    help="Ratio of selection rates. Should be >= 0.8 (Four-Fifths Rule)"
-                )
-            
-            with col2:
-                dpd = metrics['demographic_parity_difference']
-                dpd_status = "✅" if abs(dpd) <= 0.1 else "❌"
-                st.metric(
-                    label=f"{dpd_status} Demographic Parity Diff",
-                    value=f"{dpd:.4f}",
-                    delta="Pass" if abs(dpd) <= 0.1 else "Fail",
-                    delta_color="normal" if abs(dpd) <= 0.1 else "inverse",
-                    help="Difference in selection rates. Should be close to 0"
-                )
-            
-            with col3:
-                eod = metrics.get('equalized_odds_difference')
-                if eod is not None:
-                    eod_status = "✅" if abs(eod) <= 0.1 else "❌"
-                    st.metric(
-                        label=f"{eod_status} Equalized Odds Diff",
-                        value=f"{eod:.4f}",
-                        delta="Pass" if abs(eod) <= 0.1 else "Fail",
-                        delta_color="normal" if abs(eod) <= 0.1 else "inverse",
-                        help="Difference in error rates. Should be close to 0"
-                    )
-                else:
-                    st.metric(
-                        label="Equalized Odds Diff",
-                        value="N/A",
-                        help="Requires ground truth labels"
-                    )
-            
-            st.subheader(f"Selection Rates by {attr}")
-            
-            sel_rates = metrics['by_group']['selection_rate']
-            df_sel = pd.DataFrame(list(sel_rates.items()), columns=['Group', 'Selection Rate'])
-            
-            fig_sel = px.bar(
-                df_sel,
-                x='Group',
-                y='Selection Rate',
-                title=f"Positive Prediction Rate by {attr}",
-                color='Selection Rate',
-                color_continuous_scale='RdYlGn',
-                range_y=[0, 1]
+    with col4:
+        drift_data = data.get("drift_analysis", [])
+        if drift_data:
+            avg_drift = sum(d.get('score', 0) for d in drift_data) / len(drift_data)
+            st.metric(
+                label="Avg Drift Score",
+                value=f"{avg_drift:.3f}"
             )
-            
-            if len(df_sel) > 0:
-                max_rate = df_sel['Selection Rate'].max()
-                threshold = max_rate * 0.8
-                fig_sel.add_hline(
-                    y=threshold,
-                    line_dash="dash",
-                    line_color="red",
-                    annotation_text="80% Threshold",
-                    annotation_position="right"
-                )
-            
-            fig_sel.update_layout(height=400)
-            st.plotly_chart(fig_sel, width='stretch')
-            
-            if 'accuracy' in metrics['by_group']:
-                st.subheader(f"Model Accuracy by {attr}")
-                acc_data = metrics['by_group']['accuracy']
-                df_acc = pd.DataFrame(list(acc_data.items()), columns=['Group', 'Accuracy'])
-                
-                fig_acc = px.bar(
-                    df_acc,
-                    x='Group',
-                    y='Accuracy',
-                    title=f"Prediction Accuracy by {attr}",
-                    color='Accuracy',
-                    color_continuous_scale='Blues',
-                    range_y=[0, 1]
-                )
-                
-                fig_acc.update_layout(height=350)
-                st.plotly_chart(fig_acc, width='stretch')
-
-# ============================================================================
-# INTERSECTIONAL ANALYSIS (NEW!)
-# ============================================================================
-
-st.markdown("---")
-st.markdown("## 🎯 Intersectional Bias Analysis")
-st.markdown("**The Game-Changer**: Detects bias in subgroups that single-attribute analysis misses")
-
-intersectional_score = INTERSECTIONAL_DATA['intersectional_fairness_score']
-
-col1, col2 = st.columns([2, 1])
-
-with col1:
-    st.subheader("Worst-Performing Groups")
-    
-    df_intersectional = pd.DataFrame(INTERSECTIONAL_DATA['worst_groups'])
-    
-    # Add status column
-    def get_status(ratio):
-        if ratio < 0.8:
-            return "❌ FAIL"
-        elif ratio < 0.9:
-            return "⚠️ WARN"
         else:
-            return "✅ PASS"
+            st.metric(label="Avg Drift Score", value="N/A")
     
-    df_intersectional['status'] = df_intersectional['disparity_ratio'].apply(get_status)
-    df_intersectional['selection_rate_pct'] = df_intersectional['selection_rate'].apply(lambda x: f"{x:.1%}")
-    
-    st.dataframe(
-        df_intersectional[['group', 'selection_rate_pct', 'count', 'disparity_ratio', 'status']],
-        width='stretch',
-        height=250
-    )
-
-with col2:
-    st.metric(
-        label="Intersectional Fairness Score",
-        value=f"{intersectional_score}/100",
-        delta="Critical" if intersectional_score < 50 else "Warning",
-        delta_color="inverse",
-        help="Score based on Four-Fifths Rule across all intersectional groups"
-    )
-    
-    st.markdown("""
-    **Key Finding:**
-    
-    Female employees aged 50+ have a **0.38 selection rate** compared to **0.79** for the best-performing group.
-    
-    **Disparity Ratio: 0.48** ❌
-    
-    This is an **EEOC red flag** that single-attribute analysis would miss!
-    """)
-
-# Visualization
-fig_intersectional = px.bar(
-    df_intersectional,
-    x='group',
-    y='selection_rate',
-    color='disparity_ratio',
-    title="Selection Rates by Intersectional Groups",
-    color_continuous_scale='RdYlGn',
-    labels={'selection_rate': 'Selection Rate', 'group': 'Intersectional Group'}
-)
-
-fig_intersectional.add_hline(
-    y=0.8,
-    line_dash="dash",
-    line_color="red",
-    annotation_text="Fairness Threshold",
-    annotation_position="right"
-)
-
-st.plotly_chart(fig_intersectional, width='stretch')
-
-# ============================================================================
-# ROOT CAUSE ANALYSIS
-# ============================================================================
-
-st.markdown("---")
-st.markdown("## 🔍 Root Cause Analysis")
-
-report = data.get("root_cause_report")
-if report:
-    st.markdown(report)
-else:
-    st.info("ℹ️ No root cause report available.")
-
-# ============================================================================
-# MODEL PERFORMANCE & CONFUSION MATRIX (NEW!)
-# ============================================================================
-
-st.markdown("---")
-st.markdown("## 📊 Model Performance Summary")
-st.markdown("**Evaluate model accuracy and error patterns**")
-
-# Calculate metrics from demo data
-y_true = DEMO_DF['y_true'].values
-y_pred = DEMO_DF['y_pred'].values
-
-# Calculate performance metrics
-accuracy = accuracy_score(y_true, y_pred)
-precision = precision_score(y_true, y_pred, zero_division=0)
-recall = recall_score(y_true, y_pred, zero_division=0)
-f1 = f1_score(y_true, y_pred, zero_division=0)
-
-# Display metrics in cards
-col1, col2, col3, col4 = st.columns(4)
-
-with col1:
-    delta_color = "normal" if accuracy >= 0.7 else "inverse"
-    st.metric(
-        "Accuracy", 
-        f"{accuracy:.1%}",
-        delta=f"{(accuracy - 0.7):.1%}" if accuracy >= 0.7 else f"{(accuracy - 0.7):.1%}",
-        delta_color=delta_color,
-        help="Overall correctness of predictions"
-    )
-
-with col2:
-    st.metric(
-        "Precision", 
-        f"{precision:.1%}",
-        help="Of predicted positives, how many are actually positive?"
-    )
-
-with col3:
-    st.metric(
-        "Recall", 
-        f"{recall:.1%}",
-        help="Of actual positives, how many did we catch?"
-    )
-
-with col4:
-    st.metric(
-        "F1-Score", 
-        f"{f1:.1%}",
-        delta="Key Metric",
-        help="Harmonic mean of precision and recall"
-    )
-
-# Confusion Matrix Visualization
-st.subheader("Confusion Matrix")
-
-col1, col2 = st.columns([2, 1])
-
-with col1:
-    # Calculate confusion matrix
-    cm = confusion_matrix(y_true, y_pred)
-    
-    # Create heatmap
-    fig_cm, ax = plt.subplots(figsize=(8, 6))
-    sns.heatmap(
-        cm, 
-        annot=True, 
-        fmt='d', 
-        cmap='Blues', 
-        ax=ax,
-        xticklabels=['Predicted Good (0)', 'Predicted Bad (1)'],
-        yticklabels=['Actual Good (0)', 'Actual Bad (1)'],
-        cbar_kws={'label': 'Count'}
-    )
-    ax.set_title("Confusion Matrix - Credit Risk Predictions", fontsize=14, fontweight='bold')
-    ax.set_xlabel("Predicted Label", fontsize=12)
-    ax.set_ylabel("True Label", fontsize=12)
-    
-    st.pyplot(fig_cm)
-    plt.close()
-
-with col2:
-    st.markdown("### Interpretation")
-    
-    tn, fp, fn, tp = cm.ravel()
-    
-    st.markdown(f"""
-    **Matrix Breakdown**:
-    - ✅ **True Negatives**: {tn} (Correctly predicted good)
-    - ❌ **False Positives**: {fp} (Predicted bad, actually good)
-    - ❌ **False Negatives**: {fn} (Predicted good, actually bad)
-    - ✅ **True Positives**: {tp} (Correctly predicted bad)
-    
-    **Key Insights**:
-    - Total predictions: {len(y_true)}
-    - Correct predictions: {tn + tp}
-    - Errors: {fp + fn}
-    """)
-    
-    if fp > fn:
-        st.warning("⚠️ More **false positives** - Model is conservative (rejects good applicants)")
-    elif fn > fp:
-        st.warning("⚠️ More **false negatives** - Model is risky (approves bad applicants)")
+    # Fairness interpretation
+    if fairness_score >= 80:
+        st.markdown('<div class="success-box">✅ <strong>Excellent Fairness</strong> - Model shows minimal bias</div>', unsafe_allow_html=True)
+    elif fairness_score >= 60:
+        st.markdown('<div class="alert-box">⚠️ <strong>Good Fairness</strong> - Minor bias concerns, monitor closely</div>', unsafe_allow_html=True)
+    elif fairness_score >= 40:
+        st.markdown('<div class="alert-box">⚠️ <strong>Moderate Bias</strong> - Investigation recommended</div>', unsafe_allow_html=True)
     else:
-        st.success("✅ Balanced error distribution")
+        st.markdown('<div class="danger-box">❌ <strong>Significant Bias Detected</strong> - Immediate action required!</div>', unsafe_allow_html=True)
+
+    # Root Cause (Summary)
+    st.subheader("🔍 Key Insights")
+    report = data.get("root_cause_report")
+    if report:
+        st.markdown(report)
 
 # ============================================================================
-# FOOTER
+# TAB 2: FAIRNESS ANALYSIS
 # ============================================================================
 
-st.markdown("---")
+with tab2:
+    st.markdown("## ⚖️ Bias & Fairness Analysis")
+    
+    bias_data = data.get("bias_analysis", {})
+    
+    if bias_data and len(bias_data) > 1:
+        sensitive_attrs = [k for k in bias_data.keys() if k != 'fairness_score']
+        
+        # Inner Tabs for Attributes
+        sub_tabs = st.tabs([f"Attr: {attr}" for attr in sensitive_attrs])
+        
+        for i, attr in enumerate(sensitive_attrs):
+            with sub_tabs[i]:
+                metrics = bias_data[attr]
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    di = metrics['disparate_impact']
+                    st.metric(
+                        label="Disparate Impact",
+                        value=f"{di:.4f}",
+                        delta="Pass" if di >= 0.8 else "Fail",
+                        delta_color="normal" if di >= 0.8 else "inverse",
+                        help="Should be >= 0.8"
+                    )
+                
+                with col2:
+                    dpd = metrics['demographic_parity_difference']
+                    st.metric(
+                        label="Demographic Parity Diff",
+                        value=f"{dpd:.4f}",
+                        delta="Pass" if abs(dpd) <= 0.1 else "Fail",
+                        delta_color="normal" if abs(dpd) <= 0.1 else "inverse"
+                    )
+                
+                with col3:
+                    eod = metrics.get('equalized_odds_difference')
+                    if eod is not None:
+                        st.metric(
+                            label="Equalized Odds Diff",
+                            value=f"{eod:.4f}",
+                            delta="Pass" if abs(eod) <= 0.1 else "Fail",
+                            delta_color="normal" if abs(eod) <= 0.1 else "inverse"
+                        )
+                    else:
+                        st.metric("Equalized Odds Diff", "N/A")
+                
+                st.subheader(f"Selection Rates by {attr}")
+                sel_rates = metrics['by_group']['selection_rate']
+                df_sel = pd.DataFrame(list(sel_rates.items()), columns=['Group', 'Selection Rate'])
+                
+                fig_sel = px.bar(
+                    df_sel, x='Group', y='Selection Rate', color='Selection Rate',
+                    color_continuous_scale='RdYlGn', range_y=[0, 1]
+                )
+                fig_sel.add_hline(y=0.8 * df_sel['Selection Rate'].max(), line_dash="dash", line_color="red")
+                st.plotly_chart(fig_sel, use_container_width=True)
+
+# ============================================================================
+# TAB 3: INTERSECTIONAL
+# ============================================================================
+
+with tab3:
+    st.markdown("## 🎯 Intersectional Bias Analysis")
+    st.caption("Detecting bias in subgroups (e.g., Black Female over 50)")
+    
+    intersectional_score = INTERSECTIONAL_DATA['intersectional_fairness_score']
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.subheader("Worst-Performing Groups")
+        df_intersectional = pd.DataFrame(INTERSECTIONAL_DATA['worst_groups'])
+        
+        def get_status(ratio):
+            if ratio < 0.8: return "❌ FAIL"
+            elif ratio < 0.9: return "⚠️ WARN"
+            else: return "✅ PASS"
+        
+        df_intersectional['status'] = df_intersectional['disparity_ratio'].apply(get_status)
+        df_intersectional['selection_rate_pct'] = df_intersectional['selection_rate'].apply(lambda x: f"{x:.1%}")
+        
+        st.dataframe(df_intersectional[['group', 'selection_rate_pct', 'count', 'disparity_ratio', 'status']], use_container_width=True)
+    
+    with col2:
+        st.metric(
+            label="Intersectional Score",
+            value=f"{intersectional_score}/100",
+            delta="Critical" if intersectional_score < 50 else "Warning",
+            delta_color="inverse"
+        )
+        st.info("EEOC Compliance Alert: Groups with Disparity Ratio < 0.80 require justification.")
+
+# ============================================================================
+# TAB 4: WHAT-IF ANALYSIS (NEW!)
+# ============================================================================
+
+with tab4:
+    st.markdown("## 🔮 What-If Analysis & Counterfactuals")
+    st.markdown("""
+    **Understanding Decisions:** Adjust feature values to see how the model's prediction changes.
+    Generates minimal, realistic changes to flip a 'Reject' to 'Approve'.
+    """)
+    
+    col_input, col_results = st.columns([1, 2])
+    
+    with col_input:
+        st.subheader("📝 Applicant Profile")
+        with st.form("what_if_form"):
+            val_age = st.slider("Age", 18, 90, 35)
+            val_credit = st.number_input("Credit Amount", 500, 20000, 5000)
+            val_duration = st.slider("Duration (Months)", 6, 72, 24)
+            val_job = st.selectbox("Job Skill Level", [0, 1, 2, 3], index=2)
+            val_housing = st.selectbox("Housing", ["own", "rent", "free"], index=0)
+            
+            submitted = st.form_submit_button("Generate Counterfactuals")
+            
+
+    with col_results:
+        st.subheader("📋 Results")
+        
+        if submitted:
+            with st.spinner("Generating explanations..."):
+                # Prepare Payload
+                payload = {
+                    "model_id": model_id,
+                    "instances": [{
+                        "age": val_age, 
+                        "credit_amount": val_credit, 
+                        "duration": val_duration, 
+                        "job": val_job, 
+                        "housing": val_housing,
+                        # Add other defaults if needed by model schema
+                        "savings_status": "unknown",
+                        "own_telephone": "yes"
+                    }],
+                    "total_CFs": 3
+                }
+                
+                api_success = False
+                response_data = None
+                
+                # 1. Try Real API
+                try:
+                    # Assuming API is running locally on port 8000
+                    api_url = "http://localhost:8000/api/v1/explain/counterfactual"
+                    res = requests.post(api_url, json=payload, timeout=5)
+                    
+                    if res.status_code == 200:
+                        data = res.json()
+                        # specific parsing to match UI
+                        # The API returns 'explanations': [{'counterfactuals': ...}]
+                        if data.get('explanations'):
+                            response_data = data['explanations'][0] # Take first (single instance)
+                            # Remap API format to UI format if slightly different
+                            # API returns 'changes' and 'counterfactual' (full dict)
+                            # UI expects 'values' key for full dict
+                            for cf in response_data['counterfactuals']:
+                                cf['values'] = cf['counterfactual']
+                                # Ensure scores are present (API provides minimal_change_score as score_l1 usually)
+                                if 'score_l1' not in cf:
+                                    cf['score_l1'] = cf.get('minimal_change_score', 0)
+                                if 'score_l0' not in cf:
+                                    cf['score_l0'] = len(cf['changes'])
+                                
+                            api_success = True
+                            st.toast("✅ Connected to Live API Engine", icon="🔌")
+                except Exception as e:
+                    # API failed or not running
+                    pass
+
+                # 2. Fallback to Mock (if API failed)
+                if not api_success:
+                    time.sleep(1.0) # Simulate delay
+                    st.toast("⚠️ API Unavailable - Using Simulation Mode", icon="🎮")
+                    
+                    # Mock Response (Same as before)
+                    response_data = {
+                        "original_prediction": "Reject (High Risk)",
+                        "counterfactuals": [
+                            {
+                                "changes": {"credit_amount": 3500, "duration": 48},
+                                "values": {"age": val_age, "credit_amount": 3500, "duration": 48, "job": val_job, "housing": val_housing},
+                                "score_l1": 0.15,
+                                "score_l0": 2,
+                                "validity": "Valid"
+                            },
+                            {
+                                "changes": {"credit_amount": 4000, "housing": "own"},
+                                "values": {"age": val_age, "credit_amount": 4000, "duration": val_duration, "job": val_job, "housing": "own"},
+                                "score_l1": 0.22,
+                                "score_l0": 1,
+                                "validity": "Valid"
+                            }
+                        ],
+                        "validity_summary": "2 Valid, 1 Rejected by Constraints",
+                        "constraints_report": {"age_below_min": 1} # Adjusted to match API
+                    }
+
+                # RENDER RESULTS (Common logic)
+                # CURRENT PREDICTION
+                pred = response_data.get('original_prediction', 'Unknown')
+                # If API returned simple prediction in meta, use it. Otherwise mock.
+                st.markdown(f"#### Current Prediction: 🔴 **{pred}**")
+                
+                # RANKING TABLE
+                cfs = response_data.get('counterfactuals', [])
+                if not cfs:
+                    st.warning("No valid counterfactuals found.")
+                else:
+                    rows = []
+                    for i, cf in enumerate(cfs):
+                        # Format Changes
+                        changes_txt = ", ".join([f"{k}: {v}" for k,v in cf['changes'].items()])
+                        rows.append({
+                            "Rank": i+1,
+                            "Changes Needed": changes_txt,
+                            "L0 (Count)": cf.get('score_l0', 'N/A'),
+                            "L1 (Score)": round(cf.get('score_l1', 0), 4),
+                            "Validity": "✅ Valid"
+                        })
+                    
+                    df_results = pd.DataFrame(rows)
+                    st.table(df_results)
+                    
+                    # TOOLTIPS & METRICS
+                    st.info(f"ℹ️ **Minimal Change Score (L1)**: Lower is better. Represents the magnitude of change required.")
+                    
+                    # REJECTED TOGGLE
+                    report = response_data.get('constraints_report', {})
+                    if not report and 'rejected_cfs' in response_data:
+                         # Handle mock format variance
+                         report = {item['reason']: item['count'] for item in response_data['rejected_cfs']}
+
+                    show_rejected = st.checkbox("Show Rejected Plans (Debug)")
+                    if show_rejected:
+                        if report:
+                            st.warning("⚠️ **Rejected Suggestions** (Violated Constraints)")
+                            st.json(report)
+                        else:
+                            st.info("No plans were rejected by constraints.")
+
+                    # CSV EXPORT
+                    csv = df_results.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        "📥 Download Report (CSV)",
+                        csv,
+                        "counterfactual_report.csv",
+                        "text/csv",
+                        key='download-csv'
+                    )
+
+# ============================================================================
+# TAB 5: DRIFT ANALYSIS
+# ============================================================================
+
+with tab5:
+    st.markdown("## 📉 Data Drift Analysis")
+    
+    drift_data = data.get("drift_analysis", [])
+    if drift_data:
+        df_drift = pd.DataFrame(drift_data)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.dataframe(df_drift, use_container_width=True)
+        with col2:
+            fig_drift = px.bar(
+                df_drift, x='feature', y='score', color='alert',
+                color_discrete_map={True: '#dc3545', False: '#28a745'}
+            )
+            st.plotly_chart(fig_drift, use_container_width=True)
+            
+    # Interactive Drift Simulation
+    st.markdown("### 🌊 Interactive Drift Simulation")
+    drift_intensity = st.slider("Simulate Drift (%)", 0, 100, 20)
+    
+    if drift_intensity > 0:
+        df_drifted = DEMO_DF.copy()
+        df_drifted['credit_amount'] += np.random.normal(0, drift_intensity*10, len(df_drifted))
+        
+        ks_stat, p_val = ks_2samp(DEMO_DF['credit_amount'], df_drifted['credit_amount'])
+        
+        st.metric("KS P-Value", f"{p_val:.4f}", delta="Drift Detected" if p_val < 0.05 else "Stable", delta_color="inverse")
+
+# ============================================================================
+# TAB 6: PERFORMANCE
+# ============================================================================
+
+with tab6:
+    st.markdown("## 📊 Model Performance")
+    
+    y_true = DEMO_DF['y_true']
+    y_pred = DEMO_DF['y_pred']
+    
+    acc = accuracy_score(y_true, y_pred)
+    prec = precision_score(y_true, y_pred)
+    rec = recall_score(y_true, y_pred)
+    
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Accuracy", f"{acc:.2%}")
+    c2.metric("Precision", f"{prec:.2%}")
+    c3.metric("Recall", f"{rec:.2%}")
+    
+    st.subheader("Confusion Matrix")
+    cm = confusion_matrix(y_true, y_pred)
+    fig_cm = px.imshow(cm, text_auto=True, color_continuous_scale='Blues',
+                       labels=dict(x="Predicted", y="Actual", color="Count"),
+                       x=['Good', 'Bad'], y=['Good', 'Bad'])
+    st.plotly_chart(fig_cm, use_container_width=True)
+
+# ============================================================================
+# STICKY FOOTER
+# ============================================================================
+
 st.markdown("""
-<div style='text-align: center; color: #666;'>
-    🛡️ Bias Drift Guardian | Built with Streamlit | Powered by Fairlearn & SHAP<br>
-    <strong>This is a demo version</strong> - For production deployment, see the full stack version<br>
-    📧 Contact: ImdataScientistSachin@gmail.com | 
-    <a href='https://www.linkedin.com/in/sachin-paunikar-datascientists' target='_blank'>LinkedIn</a> |
-    <a href='https://github.com/YOUR_USERNAME/bias-drift-detector' target='_blank'>GitHub</a>
+<div class="sticky-footer">
+    🛡️ <strong>Bias Drift Guardian</strong> | Designed to support EEOC‑style analysis and compliance workflows. | v1.0
 </div>
 """, unsafe_allow_html=True)

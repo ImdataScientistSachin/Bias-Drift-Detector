@@ -86,6 +86,7 @@ Bias Drift Guardian is a **production-ready monitoring system** that combines:
 - ✅ **Fairness Analysis** - Ensure compliance with EEOC and EU AI Act
 - ✅ **Intersectional Bias Detection** - Unique feature that catches compound discrimination
 - ✅ **Root Cause Analysis** - SHAP-based explanations for why drift is happening
+- ✅ **Counterfactual "What-If" Analysis** - Generate actionable, minimal changes to flip model predictions (e.g., "Increase income by $5k to get approved")
 
 ---
 
@@ -123,6 +124,13 @@ Root Cause Analysis:
 - credit_amount: Decreased by 0.0423
 Recommendation: Investigate data distribution changes
 ```
+
+### 🔮 **Counterfactual Explanations ("What-If" Analysis)**
+**Go beyond "Why?" to "How to fix it?"**
+- **Actionable Insights:** "If this applicant increases savings by 10%, they would be approved."
+- **Constraint-Aware:** Respects real-world constraints (e.g., Age cannot decrease, Race is immutable).
+- **L0/L1 Optimization:** Suggests the *fewest* possible changes to achieve the desired outcome.
+- **EEOC Compliance:** Includes a sticky disclaimer and "Rejected Plans" toggle for full auditability.
 
 ### 🌊 **Interactive Drift Simulation**
 Educational tool to visualize how distribution shifts affect model performance in real-time.
@@ -729,6 +737,7 @@ If you use this project in your research or work, please cite:
 ## 🙏 Acknowledgments
 
 - **[Fairlearn](https://fairlearn.org/)** - Microsoft's fairness toolkit
+- **[DiCE](https://github.com/interpretml/DiCE)** - Diverse Counterfactual Explanations
 - **[SHAP](https://shap.readthedocs.io/)** - Lundberg & Lee's explainability framework
 - **[Streamlit](https://streamlit.io/)** - Amazing dashboard framework
 - **[FastAPI](https://fastapi.tiangolo.com/)** - Modern Python web framework

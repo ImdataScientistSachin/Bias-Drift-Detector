@@ -88,7 +88,8 @@ def run_demo():
 
     # Prepare baseline data for JSON payload
     # We convert to dict records, then sanitize every value
-    baseline_records_raw = baseline_sample.drop('Income', axis=1).to_dict(orient='records')
+    # DiCE requires the target column to be present in the data!
+    baseline_records_raw = baseline_sample.to_dict(orient='records')
     baseline_records = []
     for record in baseline_records_raw:
         clean_record = {k: to_serializable(v) for k, v in record.items()}
@@ -99,6 +100,7 @@ def run_demo():
         "numerical_features": numerical_features,
         "categorical_features": categorical_features,
         "sensitive_attributes": ["Sex", "Race"],
+        "target_column": "Income",
         "baseline_data": baseline_records
     }
     
@@ -107,6 +109,13 @@ def run_demo():
         print(f"Error registering model: {resp.text}")
         return
     print(f"   Success: {resp.json()}")
+
+    # INJECT MODEL ARTIFACT (Simulating deployment)
+    # The API runs in the same process, so we can access the global registry
+    from api.main import model_registry
+    if 'adult_v1' in model_registry:
+        model_registry['adult_v1']['model_artifact'] = clf
+        print("   [Demo Hack] Injected sklearn pipeline into API registry for DiCE.")
     
     print("4. Simulating drift (increasing Age in test data by 20 years)...")
     drifted_data = test_data.copy()
@@ -172,6 +181,36 @@ def run_demo():
     
     if metrics.get('root_cause_report'):
         print(f"\n[Root Cause Report]\n{metrics['root_cause_report']}")
+        
+    print("\n7. Generating Counterfactuals (What-If Analysis)...")
+    # Take a negative prediction (Income <= 50K) and try to flip it
+    # We'll pick a sample that likely has low income
+    query_instance = test_data[test_data['Income'] == 0].iloc[0]
+    
+    # Prepare payload
+    features_dict = query_instance.drop('Income').to_dict()
+    clean_features = {k: to_serializable(v) for k, v in features_dict.items()}
+    
+    cf_payload = {
+        "model_id": "adult_v1",
+        "instances": [clean_features],
+        "total_CFs": 3
+    }
+    
+    print(f"   Querying for instance with Income <= 50K...")
+    resp = client.post("/api/v1/explain/counterfactual", json=cf_payload)
+    
+    if resp.status_code == 200:
+        cf_res = resp.json()
+        print(f"   Success! Generated {len(cf_res['explanations'][0]['counterfactuals'])} plans.")
+        
+        # Show top plan
+        if cf_res['explanations'][0]['counterfactuals']:
+            top_cf = cf_res['explanations'][0]['counterfactuals'][0]
+            print(f"   [Top Plan] L1 Score: {top_cf.get('minimal_change_score', 0):.4f}")
+            print(f"   Changes Required: {top_cf['changes']}")
+    else:
+        print(f"   Failed to get counterfactuals: {resp.text}")
 
 if __name__ == "__main__":
     run_demo()

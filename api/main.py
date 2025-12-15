@@ -6,8 +6,10 @@ import numpy as np
 from core.drift_detector import DriftDetector
 from core.bias_analyzer import BiasAnalyzer
 from core.root_cause import RootCauseAnalyzer
+from core.counterfactual_explainer import CounterfactualExplainer
 import json
 import os
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -47,8 +49,18 @@ class ModelConfig(BaseModel):
     model_id: str
     numerical_features: List[str]
     categorical_features: List[str]
+    categorical_features: List[str]
     sensitive_attributes: List[str]
+    target_column: Optional[str] = 'target'
     baseline_data: List[Dict[str, Any]]  # List of records (dicts)
+
+
+class CounterfactualRequest(BaseModel):
+    """Schema for requesting counterfactual explanations."""
+    model_id: str
+    instances: List[Dict[str, Any]]  # List of feature dictionaries
+    total_CFs: Optional[int] = 3
+    target_class: Optional[int] = 1
 
 # ============================================================================
 # PERSISTENCE FUNCTIONS
@@ -264,6 +276,73 @@ async def log_prediction(log: PredictionLog, background_tasks: BackgroundTasks):
         background_tasks.add_task(save_model_config, log.model_id)
     
     return {"status": "logged", "timestamp": datetime.now()}
+
+
+@app.post("/api/v1/explain/counterfactual")
+async def generate_counterfactuals(request: CounterfactualRequest):
+    """
+    Generates counterfactual explanations (Batch Support).
+    Returns minimal changes needed to flip prediction.
+    """
+    if request.model_id not in model_registry:
+        raise HTTPException(status_code=404, detail="Model not found")
+    
+    entry = model_registry[request.model_id]
+    
+    # Initialize Explainer (Lazy Load)
+    if 'cf_explainer' not in entry:
+        if not entry.get('model_artifact'):
+             # If no artifact, try to use a dummy model or raise error.
+             # For this production-like code, we need a model.
+             raise HTTPException(status_code=400, detail="Model artifact (sklearn/pipeline) not found in registry. Cannot initialize DiCE.")
+        
+        try:
+            entry['cf_explainer'] = CounterfactualExplainer(
+                model=entry['model_artifact'],
+                data=entry['detector'].baseline_data,
+                target_column=entry['config'].target_column,
+                continuous_features=entry['config'].numerical_features,
+                categorical_features=entry['config'].categorical_features
+            )
+        except Exception as e:
+             raise HTTPException(status_code=500, detail=f"Failed to initialize DiCE: {str(e)}")
+
+    explainer = entry['cf_explainer']
+    
+    # Prepare Data
+    try:
+        query_df = pd.DataFrame(request.instances)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid instance data: {str(e)}")
+        
+    # Check Batch Limit
+    if len(query_df) > 20:
+         raise HTTPException(status_code=400, detail="Batch size limit exceeded (Max 20 instances).")
+
+    # Run Explanation
+    try:
+        result = explainer.explain_instance(
+            query_instances=query_df, 
+            total_CFs=request.total_CFs, 
+            target_class=request.target_class
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Explanation generation failed: {str(e)}")
+    
+    # Add API Metadata (Audit Ready)
+    response = {
+        "meta": {
+            "request_id": str(uuid.uuid4()),
+            "model_id": request.model_id,
+            "timestamp": datetime.now().isoformat(),
+            "model_version": "v1.0" 
+        },
+        "validity_summary": result.get("validity_summary"),
+        "global_constraints_report": result.get("global_constraints_report"),
+        "explanations": result.get("explanations")
+    }
+    
+    return response
 
 
 @app.get("/api/v1/models")
