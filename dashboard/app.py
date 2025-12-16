@@ -277,8 +277,41 @@ st.markdown("""
         border-top: 1px solid #dee2e6;
         z-index: 999;
     }
+    
+    /* Sticky Top Button & Welcome container */
+    .sticky-btn-container {
+        position: fixed;
+        top: 80px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 9999;
+        width: 420px;
+        text-align: center;
+    }
 </style>
 """, unsafe_allow_html=True)
+
+# ============================================================================
+# ONBOARDING FLOW (Day 1 Polish)
+# ============================================================================
+# Purpose: Reduce bounce rate by giving new users an immediate, high-value action.
+# 1. Sticky Button: Ensures the "Try Demo" call-to-action is always visible.
+# 2. Welcome Message: Contextualizes the demo for recruiters ("EEOC-style").
+# Implementation: Checks st.session_state to only show on first load.
+# ============================================================================
+
+st.markdown('<div class="sticky-btn-container">', unsafe_allow_html=True)
+if st.button("🚀 Try Demo – Bias Gap in 15s", type="primary", use_container_width=True):
+    st.session_state.selected_dataset = "german_credit"
+    st.rerun()
+
+# Welcome Message (Only on first load / if no dataset selected)
+if st.session_state.get('selected_dataset') is None:
+    st.markdown("<div style='margin-top: 10px;'>", unsafe_allow_html=True) 
+    st.success("👋 New here? Click above to see EEOC-style bias detection!")
+    st.caption("💡 **Launch demo instantly — one click to value**. Loads real datasets with known fairness gaps — Designed for **EEOC‑style bias detection**.")
+    st.markdown("</div>", unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
 
 # ============================================================================
 # HEADER
