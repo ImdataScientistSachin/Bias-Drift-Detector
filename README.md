@@ -33,10 +33,12 @@
 
 **Key Highlights:**
 - ⚡ **Deploy in 30 seconds** - Standalone Streamlit dashboard with pre-loaded demo
+- 📚 **Multi-Dataset Support** - Switch instantly between German Credit, Adult Census, and COMPAS Recidivism
 - 🎯 **Unique Feature** - Intersectional bias detection (not available in standard tools)
 - 📊 **Comprehensive Monitoring** - Drift detection (PSI, KS, Chi-square) + Fairness metrics
 - 🔍 **Root Cause Analysis** - SHAP-based explanations for model behavior changes
 - 🚀 **Production-Ready** - FastAPI backend with persistence, Docker support, live deployment
+- 🛡️ **Robust Safety Net** - Auto-fallback mock data generation (never crashes on missing files)
 - 📚 **Actively Maintained** - 2,800+ lines of documentation, open-source (MIT), updated December 2025
 
 **🎯 Perfect for:** **ML Engineers • Data Scientists • Compliance Teams • AI Ethics Researchers**
@@ -139,6 +141,14 @@ Educational tool to visualize how distribution shifts affect model performance i
 - Confusion Matrix visualization
 - Accuracy, Precision, Recall, F1-Score
 - Error breakdown and actionable insights
+
+### 📚 **Dynamic Data Hub** (New!)
+- **Multi-Dataset Selector**: Switch context instantly regardless of current state.
+    - 💳 **German Credit**: Financial compliance demo
+    - 👔 **Adult Income**: Census-based hiring fairness
+    - ⚖️ **COMPAS**: Criminal justice recidivism (with audit logging)
+- **Robust Loader**: "Missing File" protection with auto-generated mock data for rock-solid demos.
+- **Promise-First Onboarding**: "Bias Gap in 15s" frictionless startup flow.
 
 ---
 
