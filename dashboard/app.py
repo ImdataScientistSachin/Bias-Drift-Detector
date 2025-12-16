@@ -195,9 +195,9 @@ COMPAS_INTERSECTIONAL = {
 
 # Registry
 DATASET_REGISTRY = {
-    "german_credit": {"metrics": GERMAN_CREDIT_METRICS, "intersectional": GERMAN_INTERSECTIONAL, "name": "German Credit"},
-    "adult_income": {"metrics": ADULT_INCOME_METRICS, "intersectional": ADULT_INTERSECTIONAL, "name": "Adult Income"},
-    "compas": {"metrics": COMPAS_METRICS, "intersectional": COMPAS_INTERSECTIONAL, "name": "COMPAS Recidivism"}
+    "german_credit": {"metrics": GERMAN_CREDIT_METRICS, "intersectional": GERMAN_INTERSECTIONAL, "name": "💳 German Credit"},
+    "adult_income": {"metrics": ADULT_INCOME_METRICS, "intersectional": ADULT_INTERSECTIONAL, "name": "👔 Adult Income"},
+    "compas": {"metrics": COMPAS_METRICS, "intersectional": COMPAS_INTERSECTIONAL, "name": "⚖️ COMPAS Recidivism"}
 }
 
 # Sample DataFrame for drift simulation and confusion matrix
@@ -385,6 +385,10 @@ st.session_state.selected_dataset = dataset_options[selected_label]
 # TODO: Add healthcare, education datasets to expand fairness demo hub
 
 st.sidebar.caption(f"Loaded: {DATASET_REGISTRY[st.session_state.selected_dataset]['name'] if DATASET_REGISTRY[st.session_state.selected_dataset] else 'Coming Soon'}")
+
+# Session Duration Nudge (Subtle)
+st.sidebar.markdown("---")
+st.sidebar.info("💡 **Tip:** Explore the **What-If Analysis** tab to fix the bias you find!")
 
 # ============================================================================
 # MAIN DASHBOARD TABS
@@ -825,29 +829,44 @@ with tab4:
                         response_data = {"original_prediction": "Unknown", "counterfactuals": []}
 
                 # RENDER RESULTS (Common logic)
+                # RENDER RESULTS (Common logic)
                 # CURRENT PREDICTION
                 pred = response_data.get('original_prediction', 'Unknown')
-                # If API returned simple prediction in meta, use it. Otherwise mock.
-                st.markdown(f"#### Current Prediction: 🔴 **{pred}**")
+                
+                # Dynamic Status Color
+                pred_str = str(pred).lower()
+                is_positive = any(x in pred_str for x in ['good', '<=50k', '0', 'approve'])
+                
+                status_icon = "🟢" if is_positive else "🔴"
+                status_text = "Favorable" if is_positive else "Unfavorable"
+                
+                st.markdown(f"#### Current Prediction: {status_icon} **{pred}**")
                 
                 # RANKING TABLE
                 cfs = response_data.get('counterfactuals', [])
                 if not cfs:
-                    st.warning("No valid counterfactuals found.")
+                    st.warning("No valid counterfactuals found to flip the prediction.")
                 else:
                     rows = []
                     for i, cf in enumerate(cfs):
-                        # Format Changes
-                        changes_txt = ", ".join([f"{k}: {v}" for k,v in cf['changes'].items()])
+                        # Format Changes with Diff (Old -> New)
+                        changes_list = []
+                        for k, v_new in cf['changes'].items():
+                            v_old = instance_dict.get(k, '?')
+                            changes_list.append(f"**{k}**: {v_old} → {v_new}")
+                        
+                        changes_txt = ", ".join(changes_list)
+                        
                         rows.append({
                             "Rank": i+1,
-                            "Changes Needed": changes_txt,
-                            "L0 (Count)": cf.get('score_l0', 'N/A'),
-                            "L1 (Score)": round(cf.get('score_l1', 0), 4),
-                            "Validity": "✅ Valid"
+                            "Suggested Adjustments": changes_txt,
+                            "Complexity (L0)": cf.get('score_l0', 'N/A'),
+                            "Similarity Score (L1)": round(cf.get('score_l1', 0), 4),
+                            "Status": "✅ Valid"
                         })
                     
                     df_results = pd.DataFrame(rows)
+                    # Styling hack: make adjustments column wider if possible (Streamlit tables are auto-width)
                     st.table(df_results)
                     
                     # TOOLTIPS & METRICS
