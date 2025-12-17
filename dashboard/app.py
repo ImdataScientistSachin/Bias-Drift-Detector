@@ -332,7 +332,10 @@ st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown('<h1 class="main-title">🛡️ Bias Drift Guardian</h1>', unsafe_allow_html=True)
 st.markdown('<p class="subtitle">Real-time AI Fairness & Data Drift Monitoring - Interactive Demo</p>', unsafe_allow_html=True)
-st.markdown('<div class="demo-badge">📊 LIVE DEMO - German Credit Dataset</div>', unsafe_allow_html=True)
+
+# Dynamic Badge logic
+current_name = DATASET_REGISTRY[st.session_state.selected_dataset]['name']
+st.markdown(f'<div class="demo-badge">📊 LIVE DEMO - {current_name} Dataset</div>', unsafe_allow_html=True)
 
 # ============================================================================
 # SIDEBAR
