@@ -19,13 +19,9 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from datetime import datetime
 from scipy.stats import ks_2samp
 from sklearn.metrics import confusion_matrix, precision_score, recall_score, f1_score, accuracy_score
-import seaborn as sns
-import matplotlib.pyplot as plt
 import time
-import uuid
 
 # ============================================================================
 # INITIALIZATION (CRITICAL: MUST RUN BEFORE ANY WIDGETS)
@@ -342,7 +338,7 @@ st.markdown('<h1 class="main-title">🛡️ Bias Drift Guardian</h1>', unsafe_al
 st.markdown('<p class="subtitle">Real-time AI Fairness & Data Drift Monitoring - Interactive Demo</p>', unsafe_allow_html=True)
 
 # Dynamic Badge logic
-current_name = DATASET_REGISTRY[st.session_state.selected_dataset]['name']
+current_name = DATASET_REGISTRY.get(st.session_state.selected_dataset, {}).get('name', 'Unknown')
 st.markdown(f'<div class="demo-badge">📊 LIVE DEMO - {current_name} Dataset</div>', unsafe_allow_html=True)
 
 # ============================================================================
@@ -390,8 +386,10 @@ selected_label = st.sidebar.selectbox(
     help="💳 German Credit: Financial compliance\n👔 Adult Income: Hiring fairness\n⚖️ COMPAS: Criminal justice"
 )
 
-# update state
-st.session_state.selected_dataset = dataset_options[selected_label]
+# update state and RERUN to update top badge instantly
+if dataset_options[selected_label] != st.session_state.selected_dataset:
+    st.session_state.selected_dataset = dataset_options[selected_label]
+    st.rerun()
 
 # Extensibility Note
 # TODO: Add healthcare, education datasets to expand fairness demo hub
@@ -411,7 +409,7 @@ current_dataset_key = st.session_state.selected_dataset
 dataset_pkg = DATASET_REGISTRY.get(current_dataset_key)
 
 if dataset_pkg is None:
-    st.error(f"⚠️ {current_dataset_key.upper()} dataset text is not yet loaded. Please select German Credit or Adult Income.")
+    st.error(f"⚠️ {current_dataset_key.upper()} dataset text is not yet loaded. Please select a valid dataset from the sidebar.")
     st.stop()
 
 # Unpack logic
@@ -436,7 +434,7 @@ if current_dataset_key == "german_credit":
     })
     DEMO_DF['y_true'] = (DEMO_DF['Risk'] == 'bad').astype(int)
     DEMO_DF['y_pred'] = ((DEMO_DF['credit_amount'] > 7500) | (DEMO_DF['duration'] > 30)).astype(int)
-    drift_sim_feature = 'credit_amount'
+    drift_sim_feature = 'credit_amount' # MUST be numerical for Tab 5 simulation logic
     
 elif current_dataset_key == "adult_income":
     DEMO_DF = pd.DataFrame({
@@ -447,7 +445,7 @@ elif current_dataset_key == "adult_income":
     })
     DEMO_DF['y_true'] = (DEMO_DF['income'] == '>50K').astype(int)
     DEMO_DF['y_pred'] = ((DEMO_DF['hours_per_week'] > 40) | (DEMO_DF['capital_gain'] > 5000)).astype(int)
-    drift_sim_feature = 'hours_per_week'
+    drift_sim_feature = 'hours_per_week' # MUST be numerical for Tab 5 simulation logic
 
 elif current_dataset_key == "compas":
     # Robust Loader Implementation (Phase 3)
@@ -468,7 +466,7 @@ elif current_dataset_key == "compas":
         
         DEMO_DF['y_true'] = DEMO_DF['two_year_recid']
         DEMO_DF['y_pred'] = np.random.randint(0, 2, len(DEMO_DF)) # Mock predictions
-        drift_sim_feature = 'priors_count'
+        drift_sim_feature = 'priors_count' # MUST be numerical for Tab 5 simulation logic
         
     except FileNotFoundError:
         # Fallback to Robust Mock Generation
@@ -498,7 +496,7 @@ elif current_dataset_key == "compas":
         
         DEMO_DF['y_true'] = DEMO_DF['two_year_recid']
         DEMO_DF['y_pred'] = np.random.randint(0, 2, len(DEMO_DF))
-        drift_sim_feature = 'priors_count'
+        drift_sim_feature = 'priors_count' # MUST be numerical for Tab 5 simulation logic
 
 else: # Fallback / Safety Net
     # Robust Fallback: Prevents crashes in Tab 5/6 if dataset key is invalid
@@ -841,7 +839,6 @@ with tab4:
                         response_data = {"original_prediction": "Unknown", "counterfactuals": []}
 
                 # RENDER RESULTS (Common logic)
-                # RENDER RESULTS (Common logic)
                 # CURRENT PREDICTION
                 pred = response_data.get('original_prediction', 'Unknown')
                 
@@ -879,7 +876,8 @@ with tab4:
                     
                     df_results = pd.DataFrame(rows)
                     # Styling hack: make adjustments column wider if possible (Streamlit tables are auto-width)
-                    st.table(df_results)
+                    # Changed to dataframe for better mobile responsiveness
+                    st.dataframe(df_results, use_container_width=True, hide_index=True)
                     
                     # TOOLTIPS & METRICS
                     st.info(f"ℹ️ **Minimal Change Score (L1)**: Lower is better. Represents the magnitude of change required.")
@@ -963,9 +961,18 @@ with tab6:
     
     st.subheader("Confusion Matrix")
     cm = confusion_matrix(y_true, y_pred)
+    
+    # Dynamic Labels
+    if current_dataset_key == "adult_income":
+        labels = ['<=50K', '>50K']
+    elif current_dataset_key == "compas":
+        labels = ['No Recid', 'Recid']
+    else:
+        labels = ['Good', 'Bad']
+        
     fig_cm = px.imshow(cm, text_auto=True, color_continuous_scale='Blues',
                        labels=dict(x="Predicted", y="Actual", color="Count"),
-                       x=['Good', 'Bad'], y=['Good', 'Bad'])
+                       x=labels, y=labels)
     st.plotly_chart(fig_cm, use_container_width=True)
 
 # ============================================================================
