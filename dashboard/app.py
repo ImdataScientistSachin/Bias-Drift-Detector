@@ -28,6 +28,14 @@ import time
 import uuid
 
 # ============================================================================
+# INITIALIZATION (CRITICAL: MUST RUN BEFORE ANY WIDGETS)
+# ============================================================================
+# Initialize session state if not set (default to German Credit)
+# This prevents KeyErrors when the header/badge tries to access it immediately
+if "selected_dataset" not in st.session_state:
+    st.session_state.selected_dataset = "german_credit"
+
+# ============================================================================
 # DEMO DATA (Pre-calculated from German Credit Dataset)
 # ============================================================================
 
@@ -361,8 +369,9 @@ This is a standalone demo using pre-calculated metrics from the German Credit da
 st.sidebar.markdown("### 📊 Choose Dataset")
 
 # Initialize session state if not set (default to German Credit)
-if "selected_dataset" not in st.session_state:
-    st.session_state.selected_dataset = "german_credit"
+# MOVED TO TOP OF SCRIPT TO PREVENT CRASH
+# if "selected_dataset" not in st.session_state:
+#     st.session_state.selected_dataset = "german_credit"
 
 dataset_options = {
     "💳 German Credit": "german_credit",
