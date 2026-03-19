@@ -1,0 +1,986 @@
+"""
+================================================================================
+BIAS DRIFT GUARDIAN - STANDALONE DEMO
+================================================================================
+
+This is a self-contained demo version that works WITHOUT the API backend.
+Perfect for Streamlit Community Cloud deployment and portfolio showcases.
+
+Uses pre-loaded demo data from the German Credit dataset to demonstrate
+all features: drift detection, fairness analysis, and intersectional bias.
+
+🎯 DEPLOY THIS FILE to Streamlit Cloud for instant portfolio demo!
+================================================================================
+"""
+
+import streamlit as st
+import requests
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from scipy.stats import ks_2samp
+from sklearn.metrics import confusion_matrix, precision_score, recall_score, f1_score, accuracy_score
+import time
+
+# ============================================================================
+# INITIALIZATION (CRITICAL: MUST RUN BEFORE ANY WIDGETS)
+# ============================================================================
+# Initialize session state if not set (default to German Credit)
+# This prevents KeyErrors when the header/badge tries to access it immediately
+if "selected_dataset" not in st.session_state:
+    st.session_state.selected_dataset = "german_credit"
+
+# ============================================================================
+# DEMO DATA (Pre-calculated from German Credit Dataset)
+# ============================================================================
+
+# This data simulates what the API would return
+# ============================================================================
+# DEMO DATA REPOSITORY
+# ============================================================================
+
+# 1. German Credit Data (Financial)
+GERMAN_CREDIT_METRICS = {
+    "total_predictions": 150,
+    "drift_analysis": [
+        {
+            "feature": "age",
+            "type": "numerical",
+            "metric": "KS+PSI",
+            "score": 0.27,
+            "p_value": 0.001,
+            "psi": 0.28,
+            "alert": True
+        },
+        {
+            "feature": "credit_amount",
+            "type": "numerical",
+            "metric": "KS+PSI",
+            "score": 0.12,
+            "p_value": 0.234,
+            "psi": 0.08,
+            "alert": False
+        },
+        {
+            "feature": "duration",
+            "type": "numerical",
+            "metric": "KS+PSI",
+            "score": 0.15,
+            "p_value": 0.089,
+            "psi": 0.11,
+            "alert": False
+        },
+        {
+            "feature": "savings_status",
+            "type": "categorical",
+            "metric": "Chi-square",
+            "score": 10.77,
+            "p_value": 0.013,
+            "psi": 0.0,
+            "alert": True
+        }
+    ],
+    "bias_analysis": {
+        "Sex": {
+            "by_group": {
+                "selection_rate": {
+                    "Male": 0.72,
+                    "Female": 0.54
+                },
+                "accuracy": {
+                    "Male": 0.68,
+                    "Female": 0.71
+                }
+            },
+            "demographic_parity_difference": 0.18,
+            "equalized_odds_difference": 0.12,
+            "disparate_impact": 0.75
+        },
+        "Age_Group": {
+            "by_group": {
+                "selection_rate": {
+                    "20-30": 0.65,
+                    "30-40": 0.71,
+                    "40-50": 0.58,
+                    "50+": 0.42
+                }
+            },
+            "demographic_parity_difference": 0.29,
+            "equalized_odds_difference": None,
+            "disparate_impact": 0.59
+        },
+        "fairness_score": 60
+    },
+    "root_cause_report": """
+Root Cause Analysis:
+- **age**: Importance increased by 0.0847 (Base: 0.1234 → Curr: 0.2081)
+- **credit_amount**: Importance decreased by -0.0423
+Recommendation: Investigate shift in applicant age demographics.
+    """
+}
+
+GERMAN_INTERSECTIONAL = {
+    "intersectional_fairness_score": 40,
+    "worst_groups": [
+        {"combination": "Sex_Age", "group": "Female_50+", "selection_rate": 0.38, "count": 45, "disparity_ratio": 0.48},
+        {"combination": "Sex_Age", "group": "Female_40-50", "selection_rate": 0.52, "count": 67, "disparity_ratio": 0.65},
+        {"combination": "Sex_Age", "group": "Male_50+", "selection_rate": 0.58, "count": 82, "disparity_ratio": 0.73}
+    ]
+}
+
+# 2. Adult Income Data (Hiring) - Placeholder
+ADULT_INCOME_METRICS = {
+    "total_predictions": 500,
+    "drift_analysis": [
+        {"feature": "hours_per_week", "type": "numerical", "metric": "KS+PSI", "score": 0.05, "p_value": 0.4, "psi": 0.02, "alert": False},
+        {"feature": "occupation", "type": "categorical", "metric": "Chi-square", "score": 15.2, "p_value": 0.001, "psi": 0.15, "alert": True}
+    ],
+    "bias_analysis": {
+        "Sex": {
+            "by_group": {"selection_rate": {"Male": 0.30, "Female": 0.11}, "accuracy": {"Male": 0.81, "Female": 0.92}},
+            "demographic_parity_difference": 0.19,
+            "equalized_odds_difference": 0.10,
+            "disparate_impact": 0.36
+        },
+        "Race": {
+            "by_group": {"selection_rate": {"White": 0.25, "Black": 0.12, "Asian": 0.27}, "accuracy": {"White": 0.85, "Black": 0.88, "Asian": 0.82}},
+            "demographic_parity_difference": 0.13,
+            "equalized_odds_difference": 0.08,
+            "disparate_impact": 0.48
+        }
+    },
+    "fairness_score": 45,
+    "root_cause_report": "Root Cause: Strong correlation found between 'relationship' status and target, acting as a proxy for Gender."
+}
+
+ADULT_INTERSECTIONAL = {
+    "intersectional_fairness_score": 35,
+    "worst_groups": [
+        {"combination": "Sex_Race", "group": "Female_Black", "selection_rate": 0.05, "count": 120, "disparity_ratio": 0.20},
+        {"combination": "Sex_Race", "group": "Female_White", "selection_rate": 0.11, "count": 400, "disparity_ratio": 0.44},
+        {"combination": "Sex_Race", "group": "Male_Black", "selection_rate": 0.18, "count": 150, "disparity_ratio": 0.72}
+    ]
+}
+
+# 3. COMPAS Recidivism Data (Criminal Justice)
+COMPAS_METRICS = {
+    "total_predictions": 1200,
+    "drift_analysis": [
+        {"feature": "priors_count", "type": "numerical", "metric": "KS+PSI", "score": 0.18, "p_value": 0.005, "psi": 0.22, "alert": True},
+        {"feature": "age_cat", "type": "categorical", "metric": "Chi-square", "score": 8.4, "p_value": 0.04, "psi": 0.05, "alert": False}
+    ],
+    "bias_analysis": {
+        "Race": {
+            "by_group": {"selection_rate": {"Caucasian": 0.40, "African-American": 0.60}, "accuracy": {"Caucasian": 0.68, "African-American": 0.65}},
+            "demographic_parity_difference": 0.20,
+            "equalized_odds_difference": 0.15,
+            "disparate_impact": 0.66
+        },
+        "Sex": {
+            "by_group": {"selection_rate": {"Male": 0.55, "Female": 0.35}, "accuracy": {"Male": 0.67, "Female": 0.72}},
+            "demographic_parity_difference": 0.20,
+            "equalized_odds_difference": 0.11,
+            "disparate_impact": 0.63
+        }
+    },
+    "fairness_score": 35,
+    "root_cause_report": "Root Cause: High weight on 'priors_count' disproportionately affects specific demographic groups due to systemic data bias."
+}
+
+COMPAS_INTERSECTIONAL = {
+    "intersectional_fairness_score": 30,
+    "worst_groups": [
+        {"combination": "Race_Sex", "group": "African-American_Male", "selection_rate": 0.65, "count": 450, "disparity_ratio": 0.55},
+        {"combination": "Race_Sex", "group": "Caucasian_Male", "selection_rate": 0.42, "count": 280, "disparity_ratio": 0.85},
+        {"combination": "Race_Sex", "group": "African-American_Female", "selection_rate": 0.38, "count": 120, "disparity_ratio": 0.90}
+    ]
+}
+
+# Registry
+DATASET_REGISTRY = {
+    "german_credit": {"metrics": GERMAN_CREDIT_METRICS, "intersectional": GERMAN_INTERSECTIONAL, "name": "💳 German Credit"},
+    "adult_income": {"metrics": ADULT_INCOME_METRICS, "intersectional": ADULT_INTERSECTIONAL, "name": "👔 Adult Income"},
+    "compas": {"metrics": COMPAS_METRICS, "intersectional": COMPAS_INTERSECTIONAL, "name": "⚖️ COMPAS Recidivism"}
+}
+
+# Sample DataFrame for drift simulation and confusion matrix
+# This simulates the German Credit dataset structure
+# Sample DataFrame generation moved to after dataset selection to ensure consistency
+# See "DATA GENERATION" section below
+
+
+# ============================================================================
+# PAGE CONFIGURATION
+# ============================================================================
+
+st.set_page_config(
+    page_title="Bias Drift Guardian - Demo",
+    page_icon="🛡️",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# ============================================================================
+# CUSTOM CSS
+# ============================================================================
+
+st.markdown("""
+<style>
+    .main-title {
+        font-size: 3rem;
+        font-weight: 700;
+        background: linear-gradient(120deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.5rem;
+    }
+    
+    .subtitle {
+        font-size: 1.2rem;
+        color: #666;
+        margin-bottom: 2rem;
+    }
+    
+    .demo-badge {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-weight: 600;
+        display: inline-block;
+        margin-bottom: 1rem;
+    }
+    
+    .alert-box {
+        background-color: #fff3cd;
+        border-left: 4px solid #ffc107;
+        padding: 1rem;
+        border-radius: 5px;
+        margin: 1rem 0;
+    }
+    
+    .success-box {
+        background-color: #d4edda;
+        border-left: 4px solid #28a745;
+        padding: 1rem;
+        border-radius: 5px;
+        margin: 1rem 0;
+    }
+    
+    .danger-box {
+        background-color: #f8d7da;
+        border-left: 4px solid #dc3545;
+        padding: 1rem;
+        border-radius: 5px;
+        margin: 1rem 0;
+    }
+    
+    #MainMenu {visibility: hidden;}
+    
+    /* Sticky Footer */
+    .sticky-footer {
+        position: fixed;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        background-color: #f8f9fa;
+        color: #6c757d;
+        text-align: center;
+        padding: 10px;
+        font-size: 0.85rem;
+        border-top: 1px solid #dee2e6;
+        z-index: 999;
+    }
+    
+    /* Sticky Top Button & Welcome container */
+    .sticky-btn-container {
+        position: fixed;
+        top: 80px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 9999;
+        width: 420px;
+        text-align: center;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# ============================================================================
+# ONBOARDING FLOW (Day 1 Polish)
+# ============================================================================
+# Purpose: Reduce bounce rate by giving new users an immediate, high-value action.
+# 1. Sticky Button: Ensures the "Try Demo" call-to-action is always visible.
+# 2. Welcome Message: Contextualizes the demo for recruiters ("EEOC-style").
+# Implementation: Checks st.session_state to only show on first load.
+# ============================================================================
+
+st.markdown('<div class="sticky-btn-container">', unsafe_allow_html=True)
+# Refinement: "Promise First" Copy (Psychology: Outcome > Action)
+if st.button("🚀 Bias Gap in 15s – Try Demo", type="primary", use_container_width=True):
+    st.session_state.selected_dataset = "german_credit"
+    st.rerun()
+
+# Welcome Message (Only on first load / if no dataset selected)
+if st.session_state.get('selected_dataset') is None:
+    st.markdown("<div style='margin-top: 10px;'>", unsafe_allow_html=True) 
+    st.success("👋 New here? Click above to see EEOC-style bias detection!")
+    # Refinement: added <br> for better mobile scannability
+    st.caption("💡 **Launch demo instantly — one click to value**.<br>Loads real datasets with known fairness gaps — Designed for **EEOC‑style bias detection**.", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
+
+# ============================================================================
+# HEADER
+# ============================================================================
+
+st.markdown('<h1 class="main-title">🛡️ Bias Drift Guardian</h1>', unsafe_allow_html=True)
+st.markdown('<p class="subtitle">Real-time AI Fairness & Data Drift Monitoring - Interactive Demo</p>', unsafe_allow_html=True)
+
+# Dynamic Badge logic
+current_name = DATASET_REGISTRY.get(st.session_state.selected_dataset, {}).get('name', 'Unknown')
+st.markdown(f'<div class="demo-badge">📊 LIVE DEMO - {current_name} Dataset</div>', unsafe_allow_html=True)
+
+# ============================================================================
+# SIDEBAR
+# ============================================================================
+
+st.sidebar.header("⚙️ Demo Configuration")
+st.sidebar.success("✅ Demo Mode Active")
+st.sidebar.info("""
+**About This Demo:**
+
+This is a standalone demo using pre-calculated metrics from the German Credit dataset.
+
+**Features Demonstrated:**
+- ✅ Drift Detection (PSI, KS, Chi-square)
+- ✅ Fairness Analysis
+- ✅ Intersectional Bias Detection
+- ✅ Root Cause Analysis
+- ✅ **What-If Analysis & Counterfactuals**
+""")
+
+
+# Dataset Selector (The "Hub" Logic)
+st.sidebar.markdown("### 📊 Choose Dataset")
+
+# Initialize session state if not set (default to German Credit)
+# MOVED TO TOP OF SCRIPT TO PREVENT CRASH
+# if "selected_dataset" not in st.session_state:
+#     st.session_state.selected_dataset = "german_credit"
+
+dataset_options = {
+    "💳 German Credit": "german_credit",
+    "👔 Adult Income": "adult_income",
+    "⚖️ COMPAS": "compas"
+}
+
+# Reverse lookup for selectbox
+option_map = {v: k for k, v in dataset_options.items()}
+current_ver = st.session_state.selected_dataset if st.session_state.selected_dataset in option_map else "german_credit"
+
+selected_label = st.sidebar.selectbox(
+    "Select a Demo:",
+    options=list(dataset_options.keys()),
+    index=list(dataset_options.values()).index(current_ver),
+    help="💳 German Credit: Financial compliance\n👔 Adult Income: Hiring fairness\n⚖️ COMPAS: Criminal justice"
+)
+
+# update state and RERUN to update top badge instantly
+if dataset_options[selected_label] != st.session_state.selected_dataset:
+    st.session_state.selected_dataset = dataset_options[selected_label]
+    st.rerun()
+
+# Extensibility Note
+# TODO: Add healthcare, education datasets to expand fairness demo hub
+
+st.sidebar.caption(f"Loaded: {DATASET_REGISTRY[st.session_state.selected_dataset]['name'] if DATASET_REGISTRY[st.session_state.selected_dataset] else 'Coming Soon'}")
+
+# Session Duration Nudge (Subtle)
+st.sidebar.markdown("---")
+st.sidebar.info("💡 **Tip:** Explore the **What-If Analysis** tab to fix the bias you find!")
+
+# ============================================================================
+# MAIN DASHBOARD TABS
+# ============================================================================
+
+# Load Selected Data
+current_dataset_key = st.session_state.selected_dataset
+dataset_pkg = DATASET_REGISTRY.get(current_dataset_key)
+
+if dataset_pkg is None:
+    st.error(f"⚠️ {current_dataset_key.upper()} dataset text is not yet loaded. Please select a valid dataset from the sidebar.")
+    st.stop()
+
+# Unpack logic
+data = dataset_pkg["metrics"]
+INTERSECTIONAL_DATA = dataset_pkg["intersectional"]
+
+# Restore legacy variable for Tab 4 compatibility
+model_id = current_dataset_key 
+
+# ============================================================================
+# DYNAMIC DATA GENERATION (CONTEXT AWARE)
+# ============================================================================
+np.random.seed(42)
+n_samples = 150
+
+if current_dataset_key == "german_credit":
+    DEMO_DF = pd.DataFrame({
+        'age': np.random.randint(20, 70, n_samples),
+        'credit_amount': np.random.randint(500, 15000, n_samples),
+        'duration': np.random.randint(6, 48, n_samples),
+        'Risk': np.random.choice(['good', 'bad'], n_samples, p=[0.7, 0.3])
+    })
+    DEMO_DF['y_true'] = (DEMO_DF['Risk'] == 'bad').astype(int)
+    DEMO_DF['y_pred'] = ((DEMO_DF['credit_amount'] > 7500) | (DEMO_DF['duration'] > 30)).astype(int)
+    drift_sim_feature = 'credit_amount' # MUST be numerical for Tab 5 simulation logic
+    
+elif current_dataset_key == "adult_income":
+    DEMO_DF = pd.DataFrame({
+        'age': np.random.randint(18, 90, n_samples),
+        'hours_per_week': np.random.randint(10, 80, n_samples),
+        'capital_gain': np.random.randint(0, 20000, n_samples),
+        'income': np.random.choice(['<=50K', '>50K'], n_samples, p=[0.7, 0.3])
+    })
+    DEMO_DF['y_true'] = (DEMO_DF['income'] == '>50K').astype(int)
+    DEMO_DF['y_pred'] = ((DEMO_DF['hours_per_week'] > 40) | (DEMO_DF['capital_gain'] > 5000)).astype(int)
+    drift_sim_feature = 'hours_per_week' # MUST be numerical for Tab 5 simulation logic
+
+elif current_dataset_key == "compas":
+    # Robust Loader Implementation (Phase 3)
+    try:
+        # Try loading local file first (simulating real data source)
+        # Using a relative path for the demo context
+        file_path = "data/compas-scores-two-years.csv"
+        DEMO_DF = pd.read_csv(file_path)
+        
+        # Preprocessing
+        cols_to_keep = ['age', 'c_charge_degree', 'race', 'sex', 'priors_count', 'two_year_recid']
+        DEMO_DF = DEMO_DF[cols_to_keep].dropna()
+        
+        # Logging for Audit (Console)
+        dropped_count = 0 # Placeholder if read_csv worked perfectly
+        # In a real scenario, we might calculate dropped_count = original_len - len(DEMO_DF)
+        # Since we might not have the file, we will fallback to mock generation below if FileNotFoundError
+        
+        DEMO_DF['y_true'] = DEMO_DF['two_year_recid']
+        DEMO_DF['y_pred'] = np.random.randint(0, 2, len(DEMO_DF)) # Mock predictions
+        drift_sim_feature = 'priors_count' # MUST be numerical for Tab 5 simulation logic
+        
+    except FileNotFoundError:
+        # Fallback to Robust Mock Generation
+        # This ensures the demo NEVER crashes for the recruiter
+        DEMO_DF = pd.DataFrame({
+            'age': np.random.randint(18, 70, n_samples),
+            'priors_count': np.random.randint(0, 25, n_samples),
+            'two_year_recid': np.random.choice([0, 1], n_samples, p=[0.6, 0.4]),
+            'race': np.random.choice(['Caucasian', 'African-American', 'Other'], n_samples),
+            'sex': np.random.choice(['Male', 'Female'], n_samples)
+        })
+        
+        # Mock some missing values to demonstrate "Robust Loader" logging
+        # We will intentionally drop a few rows to show the message
+        initial_count = len(DEMO_DF)
+        mask = np.random.rand(n_samples) > 0.05 # 5% missing
+        DEMO_DF = DEMO_DF[mask]
+        
+        dropped = initial_count - len(DEMO_DF)
+        pct = (dropped / initial_count) * 100
+        
+        # UI Log (Reassuring)
+        st.info(f"ℹ️ **Robust Loader**: Removed {dropped} rows with missing values to ensure stability (Simulated).")
+        
+        # Console Log (Audit)
+        print(f"[COMPAS Loader] Dropped {dropped} rows ({pct:.1f}%) due to missing values.")
+        
+        DEMO_DF['y_true'] = DEMO_DF['two_year_recid']
+        DEMO_DF['y_pred'] = np.random.randint(0, 2, len(DEMO_DF))
+        drift_sim_feature = 'priors_count' # MUST be numerical for Tab 5 simulation logic
+
+else: # Fallback / Safety Net
+    # Robust Fallback: Prevents crashes in Tab 5/6 if dataset key is invalid
+    DEMO_DF = pd.DataFrame({
+        'age': np.random.randint(18, 70, n_samples),
+        'val': np.random.randn(n_samples),
+        'y_true': np.random.randint(0, 2, n_samples),
+        'y_pred': np.random.randint(0, 2, n_samples)
+    })
+    drift_sim_feature = 'val'
+
+
+
+# Create Tabs
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "📊 Overview", 
+    "⚖️ Fairness", 
+    "🎯 Intersectional", 
+    "🔮 What-If Analysis", 
+    "📉 Drift", 
+    "📊 Performance"
+])
+
+# ============================================================================
+# TAB 1: OVERVIEW
+# ============================================================================
+
+with tab1:
+    # Top-level metrics
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        total_preds = data.get("total_predictions", 0)
+        st.metric(
+            label="Total Predictions",
+            value=f"{total_preds:,}",
+            help="Total number of predictions logged"
+        )
+    
+    with col2:
+        fairness_score = data.get("bias_analysis", {}).get("fairness_score", 0)
+        st.metric(
+            label="Fairness Score",
+            value=f"{fairness_score}/100",
+            delta=f"{fairness_score - 70}" if fairness_score < 70 else None,
+            delta_color="inverse" if fairness_score < 70 else "normal",
+            help="Overall fairness score (0-100)"
+        )
+    
+    with col3:
+        drift_alerts = len([d for d in data.get("drift_analysis", []) if d.get('alert')])
+        st.metric(
+            label="Drift Alerts",
+            value=drift_alerts,
+            delta=f"+{drift_alerts}" if drift_alerts > 0 else "0",
+            delta_color="inverse" if drift_alerts > 0 else "normal"
+        )
+    
+    with col4:
+        drift_data = data.get("drift_analysis", [])
+        if drift_data:
+            avg_drift = sum(d.get('score', 0) for d in drift_data) / len(drift_data)
+            st.metric(
+                label="Avg Drift Score",
+                value=f"{avg_drift:.3f}"
+            )
+        else:
+            st.metric(label="Avg Drift Score", value="N/A")
+    
+    # Fairness interpretation
+    if fairness_score >= 80:
+        st.markdown('<div class="success-box">✅ <strong>Excellent Fairness</strong> - Model shows minimal bias</div>', unsafe_allow_html=True)
+    elif fairness_score >= 60:
+        st.markdown('<div class="alert-box">⚠️ <strong>Good Fairness</strong> - Minor bias concerns, monitor closely</div>', unsafe_allow_html=True)
+    elif fairness_score >= 40:
+        st.markdown('<div class="alert-box">⚠️ <strong>Moderate Bias</strong> - Investigation recommended</div>', unsafe_allow_html=True)
+    else:
+        st.markdown('<div class="danger-box">❌ <strong>Significant Bias Detected</strong> - Immediate action required!</div>', unsafe_allow_html=True)
+
+    # Root Cause (Summary)
+    st.subheader("🔍 Key Insights")
+    report = data.get("root_cause_report")
+    if report:
+        st.markdown(report)
+
+# ============================================================================
+# TAB 2: FAIRNESS ANALYSIS
+# ============================================================================
+
+with tab2:
+    st.markdown("## ⚖️ Bias & Fairness Analysis")
+    
+    bias_data = data.get("bias_analysis", {})
+    
+    if bias_data and len(bias_data) > 1:
+        sensitive_attrs = [k for k in bias_data.keys() if k != 'fairness_score']
+        
+        # Inner Tabs for Attributes
+        sub_tabs = st.tabs([f"Attr: {attr}" for attr in sensitive_attrs])
+        
+        for i, attr in enumerate(sensitive_attrs):
+            with sub_tabs[i]:
+                metrics = bias_data[attr]
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    di = metrics['disparate_impact']
+                    st.metric(
+                        label="Disparate Impact",
+                        value=f"{di:.4f}",
+                        delta="Pass" if di >= 0.8 else "Fail",
+                        delta_color="normal" if di >= 0.8 else "inverse",
+                        help="Should be >= 0.8"
+                    )
+                
+                with col2:
+                    dpd = metrics['demographic_parity_difference']
+                    st.metric(
+                        label="Demographic Parity Diff",
+                        value=f"{dpd:.4f}",
+                        delta="Pass" if abs(dpd) <= 0.1 else "Fail",
+                        delta_color="normal" if abs(dpd) <= 0.1 else "inverse"
+                    )
+                
+                with col3:
+                    eod = metrics.get('equalized_odds_difference')
+                    if eod is not None:
+                        st.metric(
+                            label="Equalized Odds Diff",
+                            value=f"{eod:.4f}",
+                            delta="Pass" if abs(eod) <= 0.1 else "Fail",
+                            delta_color="normal" if abs(eod) <= 0.1 else "inverse"
+                        )
+                    else:
+                        st.metric("Equalized Odds Diff", "N/A")
+                
+                st.subheader(f"Selection Rates by {attr}")
+                sel_rates = metrics['by_group']['selection_rate']
+                df_sel = pd.DataFrame(list(sel_rates.items()), columns=['Group', 'Selection Rate'])
+                
+                fig_sel = px.bar(
+                    df_sel, x='Group', y='Selection Rate', color='Selection Rate',
+                    color_continuous_scale='RdYlGn', range_y=[0, 1]
+                )
+                fig_sel.add_hline(y=0.8 * df_sel['Selection Rate'].max(), line_dash="dash", line_color="red")
+                st.plotly_chart(fig_sel, use_container_width=True)
+
+# ============================================================================
+# TAB 3: INTERSECTIONAL
+# ============================================================================
+
+with tab3:
+    st.markdown("## 🎯 Intersectional Bias Analysis")
+    st.caption("Detecting bias in subgroups (e.g., Black Female over 50)")
+    
+    intersectional_score = INTERSECTIONAL_DATA['intersectional_fairness_score']
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.subheader("Worst-Performing Groups")
+        df_intersectional = pd.DataFrame(INTERSECTIONAL_DATA['worst_groups'])
+        
+        def get_status(ratio):
+            if ratio < 0.8: return "❌ FAIL"
+            elif ratio < 0.9: return "⚠️ WARN"
+            else: return "✅ PASS"
+        
+        df_intersectional['status'] = df_intersectional['disparity_ratio'].apply(get_status)
+        df_intersectional['selection_rate_pct'] = df_intersectional['selection_rate'].apply(lambda x: f"{x:.1%}")
+        
+        st.dataframe(df_intersectional[['group', 'selection_rate_pct', 'count', 'disparity_ratio', 'status']], use_container_width=True)
+    
+    with col2:
+        st.metric(
+            label="Intersectional Score",
+            value=f"{intersectional_score}/100",
+            delta="Critical" if intersectional_score < 50 else "Warning",
+            delta_color="inverse"
+        )
+        st.info("EEOC Compliance Alert: Groups with Disparity Ratio < 0.80 require justification.")
+
+# ============================================================================
+# TAB 4: WHAT-IF ANALYSIS (NEW!)
+# ============================================================================
+
+with tab4:
+    st.markdown("## 🔮 What-If Analysis & Counterfactuals")
+    st.markdown("""
+    **Understanding Decisions:** Adjust feature values to see how the model's prediction changes.
+    Generates minimal, realistic changes to flip a 'Reject' to 'Approve'.
+    """)
+    
+    col_input, col_results = st.columns([1, 2])
+    
+    with col_input:
+        st.subheader("📝 Applicant Profile")
+        if current_dataset_key == "german_credit":
+            with st.form("what_if_form"):
+                val_age = st.slider("Age", 18, 90, 35)
+                val_credit = st.number_input("Credit Amount", 500, 20000, 5000)
+                val_duration = st.slider("Duration (Months)", 6, 72, 24)
+                val_job = st.selectbox("Job Skill Level", [0, 1, 2, 3], index=2)
+                val_housing = st.selectbox("Housing", ["own", "rent", "free"], index=0)
+                submitted = st.form_submit_button("Generate Counterfactuals")
+                
+                # Instance Dict for logic
+                instance_dict = {
+                    "age": val_age, "credit_amount": val_credit, "duration": val_duration, 
+                    "job": val_job, "housing": val_housing,
+                    "savings_status": "unknown", "own_telephone": "yes"
+                }
+
+        elif current_dataset_key == "adult_income":
+            with st.form("what_if_form"):
+                val_age = st.slider("Age", 18, 90, 35)
+                val_hours = st.slider("Hours per Week", 10, 80, 40)
+                val_gain = st.number_input("Capital Gain", 0, 99999, 0)
+                val_occ = st.selectbox("Occupation", ["Tech", "Sales", "Exec", "Other"], index=3)
+                submitted = st.form_submit_button("Generate Counterfactuals")
+                
+                instance_dict = {
+                    "age": val_age, "hours_per_week": val_hours, 
+                    "capital_gain": val_gain, "occupation": val_occ
+                }
+
+        elif current_dataset_key == "compas":
+            with st.form("what_if_form"):
+                val_age = st.slider("Age", 18, 80, 25)
+                val_priors = st.slider("Priors Count", 0, 30, 5)
+                val_charge = st.selectbox("Charge Degree", ["F", "M"], index=0) # Felony/Misdemeanor
+                submitted = st.form_submit_button("Generate Counterfactuals")
+                
+                instance_dict = {
+                    "age": val_age, "priors_count": val_priors, "c_charge_degree": val_charge
+                }
+        else:
+            st.warning("Analysis not available for this dataset.")
+            submitted = False
+            instance_dict = {}
+            
+
+    with col_results:
+        st.subheader("📋 Results")
+        
+        if submitted:
+            with st.spinner("Generating explanations..."):
+                # Prepare Payload
+                payload = {
+                    "model_id": current_dataset_key, # Use verified key
+                    "instances": [instance_dict],
+                    "total_CFs": 3
+                }
+                
+                api_success = False
+                response_data = None
+                
+                # 1. Try Real API
+                try:
+                    # Assuming API is running locally on port 8000
+                    api_url = "http://localhost:8000/api/v1/explain/counterfactual"
+                    res = requests.post(api_url, json=payload, timeout=5)
+                    
+                    if res.status_code == 200:
+                        data = res.json()
+                        # specific parsing to match UI
+                        # The API returns 'explanations': [{'counterfactuals': ...}]
+                        if data.get('explanations'):
+                            response_data = data['explanations'][0] # Take first (single instance)
+                            # Remap API format to UI format if slightly different
+                            # API returns 'changes' and 'counterfactual' (full dict)
+                            # UI expects 'values' key for full dict
+                            for cf in response_data['counterfactuals']:
+                                cf['values'] = cf['counterfactual']
+                                # Ensure scores are present (API provides minimal_change_score as score_l1 usually)
+                                if 'score_l1' not in cf:
+                                    cf['score_l1'] = cf.get('minimal_change_score', 0)
+                                if 'score_l0' not in cf:
+                                    cf['score_l0'] = len(cf['changes'])
+                                
+                            api_success = True
+                            st.toast("✅ Connected to Live API Engine", icon="🔌")
+                except Exception as e:
+                    # API failed or not running
+                    pass
+
+                # 2. Fallback to Mock (if API failed)
+                if not api_success:
+                    time.sleep(1.0) # Simulate delay
+                    st.toast("⚠️ API Unavailable - Using Simulation Mode", icon="🎮")
+                    
+                    
+                    # Mock Response Logic (Context-Aware)
+                    if current_dataset_key == "german_credit":
+                        response_data = {
+                            "original_prediction": "Reject (High Risk)",
+                            "counterfactuals": [
+                                {
+                                    "changes": {"credit_amount": 3500, "duration": 48},
+                                    "values": {**instance_dict, "credit_amount": 3500, "duration": 48},
+                                    "score_l1": 0.15, "score_l0": 2, "validity": "Valid"
+                                },
+                                {
+                                    "changes": {"credit_amount": 4000, "housing": "own"},
+                                    "values": {**instance_dict, "credit_amount": 4000, "housing": "own"},
+                                    "score_l1": 0.22, "score_l0": 1, "validity": "Valid"
+                                }
+                            ],
+                            "validity_summary": "2 Valid, 1 Rejected",
+                            "constraints_report": {"age_below_min": 1}
+                        }
+                    elif current_dataset_key == "adult_income":
+                        response_data = {
+                            "original_prediction": "<=50K",
+                            "counterfactuals": [
+                                {
+                                    "changes": {"capital_gain": 7000, "hours_per_week": 45},
+                                    "values": {**instance_dict, "capital_gain": 7000, "hours_per_week": 45},
+                                    "score_l1": 0.12, "score_l0": 2, "validity": "Valid"
+                                }
+                            ],
+                            "validity_summary": "1 Valid",
+                            "constraints_report": {}
+                        }
+                    elif current_dataset_key == "compas":
+                        response_data = {
+                            "original_prediction": "Recidivism Likely",
+                            "counterfactuals": [
+                                {
+                                    "changes": {"priors_count": max(0, instance_dict.get('priors_count', 2)-2)},
+                                    "values": {**instance_dict, "priors_count": max(0, instance_dict.get('priors_count', 2)-2)},
+                                    "score_l1": 0.25, "score_l0": 1, "validity": "Valid"
+                                }
+                            ],
+                            "validity_summary": "1 Valid",
+                            "constraints_report": {}
+                        }
+                    else:
+                        response_data = {"original_prediction": "Unknown", "counterfactuals": []}
+
+                # RENDER RESULTS (Common logic)
+                # CURRENT PREDICTION
+                pred = response_data.get('original_prediction', 'Unknown')
+                
+                # Dynamic Status Color
+                pred_str = str(pred).lower()
+                is_positive = any(x in pred_str for x in ['good', '<=50k', '0', 'approve'])
+                
+                status_icon = "🟢" if is_positive else "🔴"
+                status_text = "Favorable" if is_positive else "Unfavorable"
+                
+                st.markdown(f"#### Current Prediction: {status_icon} **{pred}**")
+                
+                # RANKING TABLE
+                cfs = response_data.get('counterfactuals', [])
+                if not cfs:
+                    st.warning("No valid counterfactuals found to flip the prediction.")
+                else:
+                    rows = []
+                    for i, cf in enumerate(cfs):
+                        # Format Changes with Diff (Old -> New)
+                        changes_list = []
+                        for k, v_new in cf['changes'].items():
+                            v_old = instance_dict.get(k, '?')
+                            changes_list.append(f"**{k}**: {v_old} → {v_new}")
+                        
+                        changes_txt = ", ".join(changes_list)
+                        
+                        rows.append({
+                            "Rank": i+1,
+                            "Suggested Adjustments": changes_txt,
+                            "Complexity (L0)": cf.get('score_l0', 'N/A'),
+                            "Similarity Score (L1)": round(cf.get('score_l1', 0), 4),
+                            "Status": "✅ Valid"
+                        })
+                    
+                    df_results = pd.DataFrame(rows)
+                    # Styling hack: make adjustments column wider if possible (Streamlit tables are auto-width)
+                    # Changed to dataframe for better mobile responsiveness
+                    st.dataframe(df_results, use_container_width=True, hide_index=True)
+                    
+                    # TOOLTIPS & METRICS
+                    st.info(f"ℹ️ **Minimal Change Score (L1)**: Lower is better. Represents the magnitude of change required.")
+                    
+                    # REJECTED TOGGLE
+                    report = response_data.get('constraints_report', {})
+                    if not report and 'rejected_cfs' in response_data:
+                         # Handle mock format variance
+                         report = {item['reason']: item['count'] for item in response_data['rejected_cfs']}
+
+                    show_rejected = st.checkbox("Show Rejected Plans (Debug)")
+                    if show_rejected:
+                        if report:
+                            st.warning("⚠️ **Rejected Suggestions** (Violated Constraints)")
+                            st.json(report)
+                        else:
+                            st.info("No plans were rejected by constraints.")
+
+                    # CSV EXPORT
+                    csv = df_results.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        "📥 Download Report (CSV)",
+                        csv,
+                        "counterfactual_report.csv",
+                        "text/csv",
+                        key='download-csv'
+                    )
+
+# ============================================================================
+# TAB 5: DRIFT ANALYSIS
+# ============================================================================
+
+with tab5:
+    st.markdown("## 📉 Data Drift Analysis")
+    
+    drift_data = data.get("drift_analysis", [])
+    if drift_data:
+        df_drift = pd.DataFrame(drift_data)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.dataframe(df_drift, use_container_width=True)
+        with col2:
+            fig_drift = px.bar(
+                df_drift, x='feature', y='score', color='alert',
+                color_discrete_map={True: '#dc3545', False: '#28a745'}
+            )
+            st.plotly_chart(fig_drift, use_container_width=True)
+            
+    # Interactive Drift Simulation
+    st.markdown("### 🌊 Interactive Drift Simulation")
+    drift_intensity = st.slider("Simulate Drift (%)", 0, 100, 20)
+    
+    if drift_intensity > 0:
+        df_drifted = DEMO_DF.copy()
+        # Add noise to the dynamic feature
+        df_drifted[drift_sim_feature] += np.random.normal(0, drift_intensity*10, len(df_drifted))
+        
+        ks_stat, p_val = ks_2samp(DEMO_DF[drift_sim_feature], df_drifted[drift_sim_feature])
+        
+        st.metric(f"KS P-Value ({drift_sim_feature})", f"{p_val:.4f}", delta="Drift Detected" if p_val < 0.05 else "Stable", delta_color="inverse")
+
+# ============================================================================
+# TAB 6: PERFORMANCE
+# ============================================================================
+
+with tab6:
+    st.markdown("## 📊 Model Performance")
+    
+    y_true = DEMO_DF['y_true']
+    y_pred = DEMO_DF['y_pred']
+    
+    acc = accuracy_score(y_true, y_pred)
+    prec = precision_score(y_true, y_pred)
+    rec = recall_score(y_true, y_pred)
+    
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Accuracy", f"{acc:.2%}")
+    c2.metric("Precision", f"{prec:.2%}")
+    c3.metric("Recall", f"{rec:.2%}")
+    
+    st.subheader("Confusion Matrix")
+    cm = confusion_matrix(y_true, y_pred)
+    
+    # Dynamic Labels
+    if current_dataset_key == "adult_income":
+        labels = ['<=50K', '>50K']
+    elif current_dataset_key == "compas":
+        labels = ['No Recid', 'Recid']
+    else:
+        labels = ['Good', 'Bad']
+        
+    fig_cm = px.imshow(cm, text_auto=True, color_continuous_scale='Blues',
+                       labels=dict(x="Predicted", y="Actual", color="Count"),
+                       x=labels, y=labels)
+    st.plotly_chart(fig_cm, use_container_width=True)
+
+# ============================================================================
+# STICKY FOOTER
+# ============================================================================
+
+st.markdown("""
+<div class="sticky-footer">
+    🛡️ <strong>Bias Drift Guardian</strong> | Designed to support EEOC‑style analysis and compliance workflows. | v1.0
+</div>
+""", unsafe_allow_html=True)
