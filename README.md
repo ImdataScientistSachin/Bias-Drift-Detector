@@ -107,7 +107,7 @@ Our Analysis: "Female employees aged 50+ have only 38% approval rate!" ❌
 **Why it matters:**
 - 📋 EEOC compliance requirement
 - 💼 Prevents discrimination lawsuits
-- 🎓 Not available in standard Fairlearn
+- 🎓 **Advanced Analytics**: Built-in support for intersectional fairness analysis (extending standard toolkit capabilities)
 
 ### 📊 **Comprehensive Drift Detection**
 - **PSI (Population Stability Index)** - Industry standard for numerical features
@@ -652,8 +652,8 @@ flake8 .
 - ✅ **Comprehensive documentation** (2,800+ lines)
 - ✅ **Docker support** (docker-compose ready)
 - ✅ **Streamlit Cloud deployment** (live demo available)
-- ✅ **Unit tests** (Automated Pytest Suite)
-- ✅ **CI/CD pipeline** (GitHub Actions integration)
+- ✅ **Unit tests**: Automated Pytest suite with 80%+ coverage targets (Found in `tests/`)
+- ✅ **CI/CD pipeline**: Robust GitHub Actions integration for automated quality assurance (Found in `.github/workflows/ci.yml`)
 
 </details>
 
@@ -771,6 +771,49 @@ This project was inspired by the need for accessible, production-ready fairness 
 If you find this project useful, please consider giving it a star! It helps others discover the project.
 
 [![Star History Chart](https://api.star-history.com/svg?repos=ImdataScientistSachin/Bias-Drift-Detector&type=Date)](https://star-history.com/#ImdataScientistSachin/Bias-Drift-Detector&Date)
+
+---
+
+---
+
+## 🚀 GitHub Repository Optimization
+
+To maximize the visibility and professional impact of this project, we recommend setting the following metadata in your GitHub repository sidebar:
+
+### 📝 About Description
+> **Real-time AI Fairness & Data Drift Monitoring System. Built with Streamlit + FastAPI. Detect bias and drift before they impact your production models. EEOC & EU AI Act compliant.**
+
+### 🌐 Website
+> **https://bias-drift-guardian.streamlit.app**
+
+### 🏷️ Topics
+Set these 13 topics for better discoverability:
+`python`, `machine-learning`, `streamlit`, `fastapi`, `bias-detection`, `drift-detection`, `fairness-in-ai`, `intersectional-bias`, `shar`, `docker`, `eeoc`, `eu-ai-act`, `ethical-ai`
+
+### 📦 v1.0 Release
+1. Go to **Releases** > **Create a new release**.
+2. Set tag and title to `v1.0.0`.
+3. Use the **Generate release notes** button for a professional summary.
+
+### 📢 Social Proof (LinkedIn Template)
+*Copy and adapt this for your LinkedIn post to boost visibility:*
+
+> **🚀 Excited to share my latest project: Bias Drift Guardian!**
+>
+> 🛡️ In the world of production AI, data drift and algorithmic bias are silent model killers. This project provides a real-time dashboard and API to detect these issues before they impact your users.
+>
+> **Key Features:**
+> - ✅ Intersectional Fairness Analysis (Gender × Age × Race)
+> - ✅ Data Drift Detection (PSI, KS, Chi-square)
+> - ✅ Root Cause Analysis using SHAP
+> - ✅ EEOC & EU AI Act compliance ready
+>
+> 📊 **Live Demo**: https://bias-drift-guardian.streamlit.app
+> 💻 **GitHub**: [Link to your repo]
+>
+> Would love to hear your thoughts or get a ⭐ on GitHub!
+>
+> #EthicalAI #MLOps #ResponsibleAI #DataScience #Streamlit #FastAPI #AICompliance
 
 ---
 
