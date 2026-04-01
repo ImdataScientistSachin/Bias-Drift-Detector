@@ -614,7 +614,31 @@ My DiCE counterfactuals directly implement this — the "What-If" analysis tells
 
 ---
 
-## SECTION 15 — THE CLOSER: WHY YOU ARE THE HIRE
+## SECTION 15 — EXPERT TIER: THE "SENIOR ARCHITECT" GRILLING
+### "What happens when the standard tools fail?"
+
+This section is for when the interviewer is a Lead Data Scientist who wants to see if you actually *understand* the math, not just the library.
+
+**Q1: "You mention PSI. What if a feature's category distribution changes completely but the bins stay the same? Does PSI catch mapping changes?"**
+> 🔵 **Deep Answer:** "PSI is sensitive to frequency shifts, not necessarily semantic shifts. If 'Category A' previously meant 'High Risk' and now it means 'Low Risk' but the frequency of 'Category A' remains 10%, PSI will be 0. That's **Concept Drift** vs **Data Drift**. To catch this, I'd monitor 'Model Error by Slice'. If the model's performance on Category A drops significantly despite stable distribution, that's a Concept Drift signal."
+
+**Q2: "What is the difference between Covariate Shift and Prior Probability Shift?"**
+> 🔵 **Deep Answer:** "Covariate shift is P(X) changing while P(Y|X) remains constant (the inputs changed). Prior Probability Shift is P(Y) changing (the target occurrence changed). My tool focuses on Covariate Shift (Data Drift). In an interview, I’d explain that handling Prior Probability Shift requires a 'Label Drift' monitor, which I’d implement by tracking the distribution of predicted probabilities over time."
+
+**Q3: "How do you handle 'Cold Start' models that don't have a baseline yet?"**
+> 🔵 **Deep Answer:** "In a cold start scenario, I'd use 'Expert-Defined Baselines' or 'Synthetic Baselines' based on the business requirements. For example, if we expect 60% of applicants to be under 40, that becomes our temporary anchor. As soon as we have 1,000 production samples, I'd transition to a 'Moving Window Baseline' that adaptively updates."
+
+**Q4: "Regarding SHAP, what is the 'Independence Assumption' and how does it affect your explanations?"**
+> 🔵 **Deep Answer:** "Standard SHAP assumes features are independent. If features are highly correlated (e.g., 'Education' and 'Salary'), SHAP might 'split' the importance between them, making both look less important than they are. I mitigate this by checking the correlation matrix during Root Cause Analysis. If correlation > 0.8, I'd recommend treating them as a feature group."
+
+**Q5: "Selection Bias in monitoring — if only 10% of applicants get a model prediction, is your drift analysis valid for the general population?"**
+> 🔵 **Deep Answer:** "Excellent point. This is 'Survival Bias'. My monitoring only sees the data the model actually processes. If the 'Upstream Filter' (business rules) changes, my drift signals might be skewed. I always advise stakeholders that this tool monitors the **Model's Exposure**, not necessarily the **Global Market**."
+
+---
+
+---
+
+## SECTION 16 — THE CLOSER: WHY YOU ARE THE HIRE
 ### Final Answer When Asked: "What makes you different from other candidates?"
 
 > "Most candidates can build a model. Fewer can monitor it. Even fewer can explain *why* it's drifting and automatically alert the team. And almost none have documented in their code the legal compliance implications of each metric.
