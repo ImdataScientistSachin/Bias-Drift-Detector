@@ -17,7 +17,9 @@ scikit-learn>=1.2.0
 fairlearn>=0.8.0  # Microsoft's fairness toolkit
 shap>=0.42.0      # SHAP values for root cause analysis
 dice-ml>=0.11
-numexpr     # DiCE for counterfactual explanations
+numexpr           # DiCE for counterfactual explanations
+mlflow>=2.10.0    # MLOps experiment tracking
+dvc>=3.0.0        # Data Version Control — version datasets alongside code
 
 # API Framework (Backend)
 fastapi>=0.100.0
@@ -32,10 +34,11 @@ plotly>=5.14.0
 seaborn>=0.12.0
 matplotlib>=3.7.0
 
-# Testing (Optional - for development)
+# Testing + HTTP Client (also used by alerting engine at runtime)
 pytest>=7.4.0
 pytest-asyncio>=0.21.0
-httpx>=0.24.0  # For testing FastAPI
+httpx>=0.24.0     # FastAPI test client + Slack webhook HTTP calls
+python-dotenv>=1.0.0  # Load .env files for ALERT_MODE, SLACK_WEBHOOK_URL etc.
 
 # ================================================================================
 # DEPLOYMENT NOTES

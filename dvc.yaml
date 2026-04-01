@@ -1,0 +1,57 @@
+# dvc.yaml — DVC Pipeline Definition for Bias Drift Guardian
+# ===========================================================
+# WHAT IS THIS? (Simple Explanation)
+#   This file is like a "recipe book" for your ML pipeline.
+#   It tells DVC: "If THIS input changes, run THIS command to regenerate THAT output."
+#   DVC then checks if the inputs changed before running — skipping steps that are
+#   already up-to-date (like a smart Makefile, but data-aware).
+#
+# IMP:
+#   "I define my pipeline stages in dvc.yaml so the entire workflow is
+#   reproducible with a single 'dvc repro' command. DVC builds a
+#   Directed Acyclic Graph (DAG) of dependencies and only re-runs
+#   stages where the inputs have actually changed."
+#
+# HOW TO RUN:
+#   dvc repro              — run only changed stages
+#   dvc repro --force      — force re-run all stages
+
+stages:
+  # ─────────────────────────────────────────────
+  # STAGE 1: Training & Experiment Logging
+  # ─────────────────────────────────────────────
+  train:
+    desc: "Train RandomForest on German Credit, log fairness metrics to MLflow."
+    cmd: python scripts/train_mlflow.py
+    deps:
+      - scripts/train_mlflow.py # re-run if training script changes
+      - core/bias_analyzer.py # re-run if bias logic changes
+    outs:
+      - mlruns/ # DVC tracks the MLflow artifacts directory
+    metrics:
+      - metrics/train_metrics.json: # DVC-native metrics tracking
+          cache: false
+
+  # ─────────────────────────────────────────────
+  # STAGE 2: Running Tests (Quality Gate)
+  # ─────────────────────────────────────────────
+  test:
+    desc: "Run the full pytest suite to validate core engine correctness."
+    cmd: pytest tests/ -v --tb=short
+    deps:
+      - tests/
+      - core/
+    always_changed: false
+
+  # ─────────────────────────────────────────────
+  # STAGE 3: API Health Validation (Post-Deploy)
+  # ─────────────────────────────────────────────
+  # NOTE: This stage would run after deployment to verify the API is healthy.
+  # Uncomment and configure endpoint when deploying to staging.
+  #
+  # validate_api:
+  #   desc: "Smoke-test the running API after deployment."
+  #   cmd: python scripts/verify_versioning.py
+  #   deps:
+  #     - scripts/verify_versioning.py
+  #     - api/main.py

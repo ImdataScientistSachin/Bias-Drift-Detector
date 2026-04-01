@@ -49,3 +49,18 @@ data/registry/
 # OS
 .DS_Store
 Thumbs.db
+
+# DVC — local cache and remote (never commit these)
+# The .dvc/ config folder IS committed (it tracks the remote address)
+# The actual data cache is NOT committed
+/dvc-remote/
+.dvc/tmp/
+.dvc/cache/
+
+# Environment secrets — NEVER commit .env (only .env.example is committed)
+.env
+*.env.local
+
+# MLflow runs (large binary artifacts — versioned by DVC)
+# Comment out if you want small mlruns committed for demo purposes
+# mlruns/

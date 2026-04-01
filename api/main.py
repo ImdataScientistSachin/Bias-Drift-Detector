@@ -7,6 +7,7 @@ from core.drift_detector import DriftDetector
 from core.bias_analyzer import BiasAnalyzer
 from core.root_cause import RootCauseAnalyzer
 from core.counterfactual_explainer import CounterfactualExplainer
+from core.alerting import BiasAlertEngine, AlertConfig  # NEW: automated alerting
 import json
 import os
 import uuid
@@ -27,9 +28,13 @@ app = FastAPI(
 PERSISTENCE_DIR = Path("data/registry")
 PERSISTENCE_DIR.mkdir(parents=True, exist_ok=True)
 
-# Global registry (In-memory with file backup)
-# In production, use PostgreSQL + Redis
+# Global in-memory registry (backed by versioned file storage)
+# Production upgrade path: replace with PostgreSQL + Redis
 model_registry = {}
+
+# Alerting Engine (initialized once at startup with env-driven config)
+# Defaults to MOCK mode — no external accounts needed for local dev/demo
+alert_engine = BiasAlertEngine(AlertConfig())
 
 # ============================================================================
 # DATA MODELS (Pydantic Schemas)
@@ -47,8 +52,8 @@ class PredictionLog(BaseModel):
 class ModelConfig(BaseModel):
     """Schema for registering a new model for monitoring."""
     model_id: str
+    version: str = "1.0.0"  # New: Support for multiple versions
     numerical_features: List[str]
-    categorical_features: List[str]
     categorical_features: List[str]
     sensitive_attributes: List[str]
     target_column: Optional[str] = 'target'
@@ -68,20 +73,22 @@ class CounterfactualRequest(BaseModel):
 
 def save_model_config(model_id: str):
     """
-    Saves a single model's configuration and logs to disk.
-    Uses JSON for configs and logs (human-readable and debuggable).
+    Saves a model's configuration and analysis to its versioned directory.
+    Format: data/registry/{model_id}/{version}/
     """
     try:
         entry = model_registry.get(model_id)
         if not entry:
             return
         
-        model_dir = PERSISTENCE_DIR / model_id
-        model_dir.mkdir(exist_ok=True)
+        version = entry['config'].version
+        model_dir = PERSISTENCE_DIR / model_id / version
+        model_dir.mkdir(parents=True, exist_ok=True)
         
         # Save configuration
         config_data = {
             "model_id": entry['config'].model_id,
+            "version": version,
             "numerical_features": entry['config'].numerical_features,
             "categorical_features": entry['config'].categorical_features,
             "sensitive_attributes": entry['config'].sensitive_attributes,
@@ -89,16 +96,16 @@ def save_model_config(model_id: str):
         with open(model_dir / "config.json", "w") as f:
             json.dump(config_data, f, indent=2)
         
-        # Save baseline data as CSV (more efficient for DataFrames)
+        # Save baseline data
         baseline_df = entry['detector'].baseline_data
         if baseline_df is not None and not baseline_df.empty:
             baseline_df.to_csv(model_dir / "baseline.csv", index=False)
         
-        # Save logs as JSON
+        # Save logs
         with open(model_dir / "logs.json", "w") as f:
             json.dump(entry['logs'], f, indent=2)
         
-        # Save analysis results if they exist
+        # Save analysis results
         if 'drift_analysis' in entry:
             with open(model_dir / "drift_analysis.json", "w") as f:
                 json.dump(entry['drift_analysis'], f, indent=2)
@@ -107,7 +114,7 @@ def save_model_config(model_id: str):
             with open(model_dir / "bias_analysis.json", "w") as f:
                 json.dump(entry['bias_analysis'], f, indent=2, default=str)
         
-        print(f"✅ Saved model '{model_id}' to {model_dir}")
+        print(f"✅ Saved model '{model_id}' [v{version}] to {model_dir}")
         
     except Exception as e:
         print(f"❌ Error saving model '{model_id}': {e}")
@@ -115,8 +122,8 @@ def save_model_config(model_id: str):
 
 def load_all_models():
     """
-    Loads all models from disk on startup.
-    Reconstructs detector and analyzer objects from saved configs.
+    Loads all models from versioned directories on startup.
+    Supports backward compatibility for legacy non-versioned models.
     """
     global model_registry
     
@@ -125,74 +132,92 @@ def load_all_models():
         return
     
     loaded_count = 0
-    for model_dir in PERSISTENCE_DIR.iterdir():
-        if not model_dir.is_dir():
+    # Iterate through model IDs
+    for model_id_dir in PERSISTENCE_DIR.iterdir():
+        if not model_id_dir.is_dir():
             continue
         
-        try:
-            model_id = model_dir.name
-            
-            # Load config
-            with open(model_dir / "config.json", "r") as f:
-                config_data = json.load(f)
-            
-            # Load baseline data
-            baseline_df = pd.read_csv(model_dir / "baseline.csv")
-            
-            # Load logs
-            logs = []
-            if (model_dir / "logs.json").exists():
-                with open(model_dir / "logs.json", "r") as f:
-                    logs = json.load(f)
-            
-            # Reconstruct objects
-            detector = DriftDetector(
-                baseline_data=baseline_df,
-                numerical_features=config_data['numerical_features'],
-                categorical_features=config_data['categorical_features']
-            )
-            
-            analyzer = BiasAnalyzer(
-                sensitive_attrs=config_data['sensitive_attributes']
-            )
-            
-            root_analyzer = RootCauseAnalyzer()
-            
-            # Reconstruct config object
-            config = ModelConfig(
-                model_id=config_data['model_id'],
-                numerical_features=config_data['numerical_features'],
-                categorical_features=config_data['categorical_features'],
-                sensitive_attributes=config_data['sensitive_attributes'],
-                baseline_data=baseline_df.to_dict(orient='records')
-            )
-            
-            # Store in registry
-            model_registry[model_id] = {
-                'config': config,
-                'detector': detector,
-                'analyzer': analyzer,
-                'root_cause': root_analyzer,
-                'logs': logs,
-                'model_artifact': None
-            }
-            
-            # Load analysis results if they exist
-            if (model_dir / "drift_analysis.json").exists():
-                with open(model_dir / "drift_analysis.json", "r") as f:
-                    model_registry[model_id]['drift_analysis'] = json.load(f)
-            
-            if (model_dir / "bias_analysis.json").exists():
-                with open(model_dir / "bias_analysis.json", "r") as f:
-                    model_registry[model_id]['bias_analysis'] = json.load(f)
-            
+        # Look for versions inside the model ID directory
+        versions = [v for v in model_id_dir.iterdir() if v.is_dir()]
+        
+        # If no version subfolders, check if the folder itself is a legacy model
+        if not versions and (model_id_dir / "config.json").exists():
+            load_model_from_path(model_id_dir)
             loaded_count += 1
-            print(f"✅ Loaded model '{model_id}' ({len(logs)} logs)")
-            
-        except Exception as e:
-            print(f"❌ Error loading model from {model_dir}: {e}")
+            continue
+
+        for v_dir in versions:
+            if (v_dir / "config.json").exists():
+                load_model_from_path(v_dir)
+                loaded_count += 1
     
     print(f"📊 Loaded {loaded_count} model(s) from disk")
+
+
+def load_model_from_path(model_dir: Path):
+    """Utility to load a single model version from a specific directory."""
+    try:
+        # Load config
+        with open(model_dir / "config.json", "r") as f:
+            config_data = json.load(f)
+        
+        model_id = config_data['model_id']
+        version = config_data.get('version', 'legacy')
+        
+        # Composite ID for internal registry (if multiple versions exist, 
+        # we might need to handle which one's 'active'. For now, we load them.)
+        registry_key = f"{model_id}:{version}" if version != 'legacy' else model_id
+        
+        # Load baseline data
+        baseline_df = pd.read_csv(model_dir / "baseline.csv")
+        
+        # Initialize Core Components
+        detector = DriftDetector(
+            baseline_data=baseline_df,
+            numerical_features=config_data['numerical_features'],
+            categorical_features=config_data['categorical_features']
+        )
+        
+        analyzer = BiasAnalyzer(sensitive_attrs=config_data['sensitive_attributes'])
+        root_analyzer = RootCauseAnalyzer()
+        
+        # Reconstruct config object
+        config = ModelConfig(
+            model_id=model_id,
+            version=version,
+            numerical_features=config_data['numerical_features'],
+            categorical_features=config_data['categorical_features'],
+            sensitive_attributes=config_data['sensitive_attributes'],
+            baseline_data=baseline_df.to_dict(orient='records')
+        )
+        
+        # Store in registry
+        model_registry[registry_key] = {
+            'config': config,
+            'detector': detector,
+            'analyzer': analyzer,
+            'root_cause': root_analyzer,
+            'logs': [],
+            'model_artifact': None
+        }
+        
+        # Load logs and analysis if present
+        if (model_dir / "logs.json").exists():
+            with open(model_dir / "logs.json", "r") as f:
+                model_registry[registry_key]['logs'] = json.load(f)
+        
+        if (model_dir / "drift_analysis.json").exists():
+            with open(model_dir / "drift_analysis.json", "r") as f:
+                model_registry[registry_key]['drift_analysis'] = json.load(f)
+        
+        if (model_dir / "bias_analysis.json").exists():
+            with open(model_dir / "bias_analysis.json", "r") as f:
+                model_registry[registry_key]['bias_analysis'] = json.load(f)
+        
+        print(f"✅ Loaded model '{model_id}' [v{version}]")
+        
+    except Exception as e:
+        print(f"❌ Error loading model version from {model_dir}: {e}")
 
 # ============================================================================
 # STARTUP/SHUTDOWN EVENTS
@@ -347,8 +372,19 @@ async def generate_counterfactuals(request: CounterfactualRequest):
 
 @app.get("/api/v1/models")
 async def list_models():
-    """Returns a list of all registered model IDs."""
+    """Returns a list of all registered model IDs and their versions."""
     return {"models": list(model_registry.keys())}
+
+
+@app.get("/api/v1/models/{model_id}/versions")
+async def list_model_versions(model_id: str):
+    """Returns all available versions for a specific model ID on disk."""
+    model_path = PERSISTENCE_DIR / model_id
+    if not model_path.exists():
+        raise HTTPException(status_code=404, detail="Model ID not found")
+    
+    versions = [d.name for d in model_path.iterdir() if d.is_dir()]
+    return {"model_id": model_id, "versions": versions}
 
 
 @app.get("/api/v1/health")
@@ -362,15 +398,25 @@ async def health_check():
 
 
 @app.get("/api/v1/metrics/{model_id}")
-async def get_metrics(model_id: str):
+async def get_metrics(model_id: str, background_tasks: BackgroundTasks):
     """
     Retrieves the latest drift and bias metrics for a specific model.
-    Triggers an on-demand analysis.
+    Triggers an on-demand analysis, then fires automated alerts if thresholds
+    are breached (PSI > 0.25 or Fairness Score < 80).
+
+    ALERTING FLOW:
+      Analysis runs → results checked → alert_engine.check_and_alert() called
+      → dispatches to mock console, Slack, or email based on ALERT_MODE env var.
     """
     if model_id not in model_registry:
         raise HTTPException(status_code=404, detail="Model not found")
-    
+
     results = await run_analysis(model_id)
+
+    # Fire alerts asynchronously so the API response is not delayed
+    # BackgroundTasks run AFTER the response is sent to the client
+    background_tasks.add_task(alert_engine.check_and_alert, model_id, results)
+
     return results
 
 # ============================================================================
